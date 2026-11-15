@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Publishes the current version as a GitHub release; installed copies of My Tv then offer it as an update.
-# Usage: ./release.sh "What's new, one short line"
+# Usage: ./release.sh "notes shown in the app, one short line"
 # Builds Apps/MyTv-v<versionCode>.apk first if it isn't there (build.sh), then uploads it with update.json
 # (version, download address, SHA-256 the app checks before installing, and the notes shown in the app).
 set -euo pipefail
 cd "$(dirname "$0")"
-NOTES="${1:?usage: ./release.sh \"What's new\"}"
+NOTES="${1:?usage: ./release.sh \"notes shown in the app\"}"
 REPO=$(sed -n 's/^const val RELEASES_REPO = "\(.*\)"$/\1/p' app/src/main/kotlin/com/shoqremote/app/Updater.kt)
 CODE=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts)
 NAME=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
