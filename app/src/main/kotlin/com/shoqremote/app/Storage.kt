@@ -58,6 +58,11 @@ class Storage(context: Context) {
         get() = prefs.getBoolean("asked_background", false)
         set(value) = prefs.edit().putBoolean("asked_background", value).apply()
 
+    /** The versionCode the screens last opened with; 0 before version 10 recorded it. */
+    var lastVersionCode: Long
+        get() = prefs.getLong("last_version_code", 0L)
+        set(value) = prefs.edit().putLong("last_version_code", value).apply()
+
     var channels: List<TvChannel>
         get() = prefs.getString("channels", null)?.let { json ->
             runCatching {

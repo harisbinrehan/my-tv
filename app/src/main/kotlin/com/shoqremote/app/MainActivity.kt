@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         setContent { RemoteApp(vm) }
+        vm.announceUpdate()
         if (Build.VERSION.SDK_INT >= 33 && vm.state.value.notificationControls &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {

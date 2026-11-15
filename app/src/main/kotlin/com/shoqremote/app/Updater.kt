@@ -81,6 +81,22 @@ class Updater(private val app: Application, private val notify: (String) -> Unit
 
     fun dismiss() = _state.update { it.copy(dismissed = true) }
 
+    /**
+     * Says so the first time the app opens after an update. Versions before 10 didn't record their number, so
+     * then an install time later than the first install counts; a fresh install says nothing.
+     */
+    fun announceIfUpdated() {
+        val storage = Storage(app)
+        val seen = storage.lastVersionCode
+        if (seen == installedCode) return
+        val updated = if (seen > 0) seen < installedCode else installed.lastUpdateTime > installed.firstInstallTime
+        storage.lastVersionCode = installedCode
+        if (updated) {
+            Trace.i("opened after updating to ${installed.versionName}")
+            notify("My Tv updated to ${installed.versionName}. Your pairing and settings are kept.")
+        }
+    }
+
     /** Downloads, verifies and installs [release]; Android shows its own confirmation. */
     fun install(context: Context) {
         val release = _state.value.available ?: return

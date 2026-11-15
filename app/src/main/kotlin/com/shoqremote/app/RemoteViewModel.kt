@@ -18,6 +18,8 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     fun installUpdate(context: android.content.Context) = updater.install(context)
 
     fun dismissUpdate() = updater.dismiss()
+
+    fun announceUpdate() = updater.announceIfUpdated()
     val messages: Flow<String> = link.messages
 
     fun start() = link.acquire(HOLDER)
