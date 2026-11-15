@@ -33,7 +33,7 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 9: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 10: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
 
 ### Version 5 (typing first, premium dark design), tested 2026-11-15
 - **Typing panel** (`ui/TypePanel.kt`), one tap from anywhere: the Type tab in the middle of the bottom bar, the
@@ -235,6 +235,10 @@ app/          the Android app
   shows its confirmation (`UpdateReceiver`), and the first time asks to allow installing from My Tv.
   `BootReceiver` also handles `MY_PACKAGE_REPLACED` to bring the notification back after an update.
 - Publish with `./release.sh "notes"` after bumping the version. Never publish an APK signed with any other key.
+- After publishing, GitHub's `releases/latest` can keep pointing at the previous release for a few minutes on some
+  of its servers (seen 2026-11-16: the emulator got v9 for about 5 minutes while the Mac already got v10). That is
+  not an app bug; the in-app update to v10 then worked end to end on the emulator (permission page, download,
+  SHA-256 check, Android's confirmation, "My Tv updated to 10.0").
 - **Security rule: the signing keystore (`~/.android/debug.keystore` on the owner's Mac) is what stops anyone
   else's APK from replacing the app.** Never commit it, upload it or copy it into the repo. Also never commit
   `state/` (CLI pairing key), `local.properties`, `~/.android/adbkey` (wireless debugging key) or APKs.
