@@ -8,6 +8,7 @@ class MyTvApp : Application() {
         private set
     lateinit var updater: Updater
         private set
+    val logos: ChannelLogos by lazy { ChannelLogos(this) }
 
     override fun onCreate() {
         super.onCreate()

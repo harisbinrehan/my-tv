@@ -33,7 +33,20 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 10: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 11: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 11 (owner's layout requests, 2026-11-16)
+
+- Navigation: the remote is the home page, opened from a button left of the power button in the header; the
+  bottom bar is Apps, Type, TV; Back returns to the remote. The Now page and the big Turn TV on bar are gone.
+- TV: channel logos (`ChannelLogos.kt` + `assets/channel_logos.json`, built by `tools/channel_logos.py` from the
+  public iptv-org database: 180 of the 199 published Shoq channel names, Pakistani channels preferred), star
+  favourites on top, search by name, and a typed number offers "Watch channel N".
+- Still owed: the box's own channel numbers and installed apps. PTCL publishes no numbered line-up and the box
+  reports neither. Developer mode on the box is locked by PTCL (tapping Build shows a QR code holding the box
+  MAC and an RSA-encrypted challenge for PTCL/ZTE technicians); never try to get around it. Plan: the owner props
+  the phone's camera at the TV with wireless debugging on; the Mac steps through channels (CLI) and reads each
+  channel banner from `adb exec-out screencap`, then seeds the list. Photos are the fallback.
 
 ### Version 5 (typing first, premium dark design), tested 2026-11-15
 - **Typing panel** (`ui/TypePanel.kt`), one tap from anywhere: the Type tab in the middle of the bottom bar, the

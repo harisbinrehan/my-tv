@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val link = (app as MyTvApp).link
     private val updater = (app as MyTvApp).updater
+    val logos: ChannelLogos = (app as MyTvApp).logos
     val state: StateFlow<UiState> = link.state
     val update: StateFlow<UpdateState> = updater.state
 

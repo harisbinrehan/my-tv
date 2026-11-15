@@ -24,13 +24,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LiveTv
-import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -57,15 +57,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shoqremote.app.CHANNEL_CATEGORIES
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import com.shoqremote.app.CHANNEL_PREFIX
+import com.shoqremote.app.ChannelLogos
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.shoqremote.app.RemoteViewModel
 import com.shoqremote.app.TvChannel
 import com.shoqremote.app.UiState
-import com.shoqremote.atv.Keys
 
 private const val ALL = "All"
 
-/** Live TV channels: dial a number, search, filter by category, and keep pinned favourites in your own order. */
+/** Live TV channels with their logos: dial a number, search, filter by category, and star favourites to keep them on top. */
 @Composable
 internal fun TvPage(state: UiState, vm: RemoteViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -75,6 +82,8 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
     val pinned = state.pinnedChannels.mapNotNull { number -> state.channels.firstOrNull { it.number == number } }
     val categories = listOf(ALL) + CHANNEL_CATEGORIES.filter { name -> state.channels.any { it.category == name } }
     val needle = query.trim()
+    // A typed number can go straight to that channel, listed or not.
+    val dial = needle.takeIf { it.length in 1..4 && it.all(Char::isDigit) }?.toIntOrNull()
     val shown = state.channels.filter { channel ->
         (category == ALL || channel.category == category) &&
             (needle.isEmpty() || channel.name.contains(needle, ignoreCase = true) || channel.number.toString().startsWith(needle))
@@ -84,19 +93,23 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { QuickDial(state, vm) }
         item {
             OutlinedTextField(
                 value = query,
-                onValueChange = { query = it },
+                onValueChange = { query = it.take(40) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text("Search channels by name or number") },
+                placeholder = { Text("Search, or type a channel number") },
                 leadingIcon = { Icon(Icons.Rounded.Search, null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Clear, "Clear search") }
                 },
+                keyboardOptions = KeyboardOptions(imeAction = if (dial != null) ImeAction.Go else ImeAction.Search),
+                keyboardActions = KeyboardActions(onGo = { dial?.let(vm::watchChannel) }),
             )
+        }
+        if (dial != null) {
+            item(key = "dial") { DialRow(dial, state, vm) }
         }
         if (categories.size > 1) {
             item {
@@ -106,7 +119,7 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
             }
         }
         if (pinned.isNotEmpty() && needle.isEmpty() && category == ALL) {
-            item { SectionLabel("Pinned") }
+            item { SectionLabel("Favourites") }
             itemsIndexed(pinned, key = { _, channel -> "pinned-${channel.number}" }) { index, channel ->
                 ChannelRow(channel, state, vm, pinned = true, order = index to pinned.size, onEdit = { editing = channel })
             }
@@ -123,7 +136,7 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
         }
         if (state.channels.isEmpty()) {
             item { EmptyChannels() }
-        } else if (shown.isEmpty()) {
+        } else if (shown.isEmpty() && dial == null) {
             item { Text("No channels match.", color = Palette.Muted) }
         }
         items(shown, key = { "channel-${it.number}" }) { channel ->
@@ -153,56 +166,29 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
     }
 }
 
+/** "Watch channel 123" for a typed number, so any channel works even before it's in the list. */
 @Composable
-private fun QuickDial(state: UiState, vm: RemoteViewModel) {
-    var number by rememberSaveable { mutableStateOf("") }
-    val go: () -> Unit = {
-        number.toIntOrNull()?.let {
-            vm.watchChannel(it)
-            number = ""
-        }
-    }
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Palette.Panel).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+private fun DialRow(number: Int, state: UiState, vm: RemoteViewModel) {
+    val busy = state.opening == "$CHANNEL_PREFIX$number"
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Palette.Raised)
+            .clickable(onClickLabel = "Watch channel $number") { vm.watchChannel(number) }
+            .padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.LiveTv, null, tint = Palette.Cyan)
-            Spacer(Modifier.width(8.dp))
-            Text("Go to channel", fontWeight = FontWeight.SemiBold, color = Palette.Text, modifier = Modifier.weight(1f))
-            if (state.opening?.startsWith(CHANNEL_PREFIX) == true) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Palette.Cyan)
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = number,
-                onValueChange = { typed -> number = typed.filter(Char::isDigit).take(4) },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                placeholder = { Text("Channel number") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { go() }),
-            )
-            Spacer(Modifier.width(10.dp))
-            Button(onClick = go, enabled = number.isNotEmpty()) { Text("Go") }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            ChannelStep(vm, Keys.CHANNEL_DOWN, Icons.Rounded.KeyboardArrowDown, "Channel down")
-            ChannelStep(vm, Keys.CHANNEL_UP, Icons.Rounded.KeyboardArrowUp, "Channel up")
-            Text("Live TV opens by itself when you pick a channel.", fontSize = 11.sp, color = Palette.Muted)
+        Icon(Icons.Rounded.LiveTv, null, tint = Palette.Indigo)
+        Spacer(Modifier.width(12.dp))
+        Text("Watch channel $number", fontWeight = FontWeight.SemiBold, color = Palette.Text, modifier = Modifier.weight(1f))
+        if (busy) {
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Palette.Indigo)
+        } else {
+            Button(onClick = { vm.watchChannel(number) }) { Text("Go") }
         }
     }
 }
-
-@Composable
-private fun ChannelStep(vm: RemoteViewModel, code: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) =
-    KeyButton(vm::key, code, label, Modifier.size(width = 72.dp, height = 44.dp), shape = RoundedCornerShape(12.dp), color = Palette.Raised) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, Modifier.size(20.dp), tint = Palette.Text)
-            Text("CH", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
-        }
-    }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -229,20 +215,11 @@ private fun ChannelRow(
             .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier.size(width = 54.dp, height = 40.dp).clip(RoundedCornerShape(10.dp)).background(Palette.Raised),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (busy) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Palette.Text)
-            } else {
-                Text("${channel.number}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Palette.Text)
-            }
-        }
+        ChannelLogo(channel, busy, vm.logos)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(channel.name, fontWeight = FontWeight.Medium, color = Palette.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(channel.category, fontSize = 12.sp, color = Palette.Muted)
+            Text("${channel.number}  ·  ${channel.category}", fontSize = 12.sp, color = Palette.Muted, maxLines = 1)
         }
         if (order != null) {
             val (index, size) = order
@@ -255,13 +232,40 @@ private fun ChannelRow(
         }
         IconButton(onClick = { vm.togglePinChannel(channel.number) }) {
             Icon(
-                if (pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
-                if (pinned) "Unpin" else "Pin",
+                if (pinned) Icons.Rounded.Star else Icons.Outlined.StarOutline,
+                if (pinned) "Remove from favourites" else "Add to favourites",
                 tint = if (pinned) Palette.Gold else Palette.Muted,
             )
         }
     }
 }
+
+/**
+ * The channel's logo on a light tile (most logos are drawn for light backgrounds), or its number until the logo
+ * arrives or when it has none; a spinner while the TV switches to it.
+ */
+@Composable
+private fun ChannelLogo(channel: TvChannel, busy: Boolean, logos: ChannelLogos) {
+    val logo by produceState<ImageBitmap?>(null, channel.name) {
+        value = withContext(Dispatchers.IO) { logos.bitmap(channel.name)?.asImageBitmap() }
+    }
+    val image = logo
+    Box(
+        Modifier
+            .size(width = 64.dp, height = 44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (image != null) LogoTile else Palette.Raised),
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            busy -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = if (image != null) Palette.Background else Palette.Text)
+            image != null -> Image(image, null, Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 5.dp), contentScale = ContentScale.Fit)
+            else -> Text("${channel.number}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Palette.Text)
+        }
+    }
+}
+
+private val LogoTile = Color(0xFFEDEDF0)
 
 @Composable
 private fun EmptyChannels() {
@@ -271,7 +275,7 @@ private fun EmptyChannels() {
     ) {
         Text("Add your channels", fontWeight = FontWeight.SemiBold, color = Palette.Text)
         Text(
-            "Tap Add channel and enter the number, name and category of each channel you watch. Pin favourites to keep them on top in your own order. Until then, type any number above to switch straight to it.",
+            "Tap Add channel and enter the number and name of a channel; its logo appears by itself. Star favourites to keep them on top in your own order. Until then, type any number above to switch straight to it.",
             fontSize = 13.sp,
             color = Palette.Muted,
         )

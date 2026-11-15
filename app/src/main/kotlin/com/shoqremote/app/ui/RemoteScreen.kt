@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.view.HapticFeedbackConstants
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -58,7 +59,6 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SettingsRemote
 import androidx.compose.material.icons.rounded.SystemUpdate
-import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -120,7 +120,8 @@ import com.shoqremote.app.UiState
 import com.shoqremote.atv.Keys
 import com.shoqremote.atv.ShoqBox
 
-private enum class Section { REMOTE, APPS, TV, NOW }
+/** The remote is the home page, opened from the header; Apps and TV are the bottom bar's sections. */
+private enum class Section { REMOTE, APPS, TV }
 
 @Composable
 fun RemoteApp(vm: RemoteViewModel) {
@@ -147,13 +148,14 @@ fun RemoteApp(vm: RemoteViewModel) {
     var typing by rememberSaveable { mutableStateOf(false) }
     val onType: () -> Unit = { typing = true }
     LaunchedEffect(vm) { vm.imeRequests.collect { typing = true } }
+    BackHandler(enabled = paired && !typing && section != Section.REMOTE) { section = Section.REMOTE }
     MyTvTheme {
         Box(Modifier.fillMaxSize().background(Palette.Background)) {
             Scaffold(
                 containerColor = Palette.Background,
                 topBar = {
                     Column {
-                        TopArea(state, vm)
+                        TopArea(state, vm, onRemote = section == Section.REMOTE) { section = Section.REMOTE }
                         UpdateBanner(vm)
                     }
                 },
@@ -166,7 +168,6 @@ fun RemoteApp(vm: RemoteViewModel) {
                         section == Section.REMOTE -> RemotePage(state, vm, onVoice, onType)
                         section == Section.APPS -> AppsPage(state, vm)
                         section == Section.TV -> TvPage(state, vm)
-                        else -> NowPage(state, vm, onVoice, onType)
                     }
                     if (state.listening) {
                         ListeningBanner(Modifier.align(Alignment.BottomCenter), onStop = vm::toggleVoiceSearch)
@@ -179,7 +180,7 @@ fun RemoteApp(vm: RemoteViewModel) {
 }
 
 @Composable
-private fun TopArea(state: UiState, vm: RemoteViewModel) {
+private fun TopArea(state: UiState, vm: RemoteViewModel, onRemote: Boolean, openRemote: () -> Unit) {
     val paired = state.link != Link.NOT_PAIRED
     Row(
         Modifier
@@ -195,7 +196,11 @@ private fun TopArea(state: UiState, vm: RemoteViewModel) {
             Text("My Tv", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Palette.Text)
             StatusLine(state)
         }
-        if (paired) PowerButton(state, vm::power)
+        if (paired) {
+            RemoteButton(onRemote, openRemote)
+            Spacer(Modifier.width(10.dp))
+            PowerButton(state, vm::power)
+        }
         OverflowMenu(state, vm)
     }
 }
@@ -226,32 +231,22 @@ private fun PowerButton(state: UiState, onClick: () -> Unit) {
     }
 }
 
-/** Fills the quick row while the TV is off or out of reach, where Settings, Search and Mute can't do anything. */
+/** The remote lives in the header so every section is one tap from it; tinted while it's the page on screen. */
 @Composable
-private fun TurnOnBar(state: UiState, height: Dp, onClick: () -> Unit) {
+private fun RemoteButton(selected: Boolean, onClick: () -> Unit) {
     val view = LocalView.current
-    val busy = state.opening == POWER_TARGET
-    Row(
+    Box(
         Modifier
-            .fillMaxWidth()
-            .height(height - 12.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(Palette.accent())
-            .clickable(enabled = !busy, onClickLabel = "Turn TV on", role = Role.Button) {
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (selected) Palette.Indigo.copy(alpha = 0.30f) else Palette.Raised)
+            .clickable(onClickLabel = "Remote", role = Role.Button) {
                 view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 onClick()
-            }
-            .padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
+            },
+        contentAlignment = Alignment.Center,
     ) {
-        if (busy) {
-            CircularProgressIndicator(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-        } else {
-            Icon(Icons.Rounded.PowerSettingsNew, null, Modifier.size(28.dp), tint = Color.White)
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(if (busy) "Turning on..." else "Turn TV on", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+        Icon(Icons.Rounded.SettingsRemote, "Remote", Modifier.size(22.dp), tint = Palette.Text)
     }
 }
 
@@ -408,11 +403,9 @@ private fun BottomBar(section: Section, onType: () -> Unit, onSelect: (Section) 
                 unselectedIconColor = Palette.Muted,
                 unselectedTextColor = Palette.Muted,
             )
-            NavItem(section, Section.REMOTE, Icons.Rounded.SettingsRemote, "Remote", colors, onSelect)
             NavItem(section, Section.APPS, Icons.Rounded.Apps, "Apps", colors, onSelect)
             TypeNavItem(onType)
             NavItem(section, Section.TV, Icons.Rounded.LiveTv, "TV", colors, onSelect)
-            NavItem(section, Section.NOW, Icons.Rounded.TouchApp, "Now", colors, onSelect)
         }
     }
 }
@@ -491,9 +484,7 @@ private fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit,
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly,
         ) {
-            val tvOff = state.link == Link.OFFLINE || (state.link == Link.CONNECTED && state.power == false) ||
-                state.opening == POWER_TARGET
-            if (tvOff) TurnOnBar(state, quickRow, vm::turnOn) else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 ActionButton(Icons.Rounded.Keyboard, "Type", accent = true, onClick = onType)
                 ActionButton(Icons.Rounded.Mic, if (state.listening) "Listening" else "Voice", selected = state.listening, onClick = onVoice)
                 ActionButton(
