@@ -33,7 +33,7 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 8: version 5, plus section 9 item 6, plus the activity log in section 8)
+## 3. Current state (version 9: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
 
 ### Version 5 (typing first, premium dark design), tested 2026-11-15
 - **Typing panel** (`ui/TypePanel.kt`), one tap from anywhere: the Type tab in the middle of the bottom bar, the
@@ -224,6 +224,21 @@ app/          the Android app
 - Version 4 onwards is signed with this owner's Mac debug keystore (`~/.android/debug.keystore`). Version 3 was
   signed elsewhere, so it must be uninstalled once before version 4 installs. Keep that keystore to update in place.
 - Install by sideloading; Android may warn about an unknown developer.
+
+### In-app updates and the public repo (version 9 and later)
+
+- The source is public at github.com/harisbinrehan/my-tv (made public 2026-11-16 at the owner's request, after
+  an audit: no keys, tokens or passwords; commits use the GitHub no-reply address, not the owner's email).
+- `Updater.kt` reads `releases/latest/download/update.json` (versionCode, versionName, url, sha256, notes) from
+  `RELEASES_REPO`, on every return to the app at most every 15 minutes, and from the menu's Check for updates.
+  Update downloads the APK over HTTPS, checks the SHA-256, and commits it through `PackageInstaller`; Android
+  shows its confirmation (`UpdateReceiver`), and the first time asks to allow installing from My Tv.
+  `BootReceiver` also handles `MY_PACKAGE_REPLACED` to bring the notification back after an update.
+- Publish with `./release.sh "notes"` after bumping the version. Never publish an APK signed with any other key.
+- **Security rule: the signing keystore (`~/.android/debug.keystore` on the owner's Mac) is what stops anyone
+  else's APK from replacing the app.** Never commit it, upload it or copy it into the repo. Also never commit
+  `state/` (CLI pairing key), `local.properties`, `~/.android/adbkey` (wireless debugging key) or APKs.
+  `.gitignore` covers these. Before pushing, grep for keys and personal details as on 2026-11-16.
 
 ## 8. Testing against the real box from a computer
 

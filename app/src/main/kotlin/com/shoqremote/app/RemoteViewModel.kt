@@ -9,7 +9,15 @@ import kotlinx.coroutines.flow.StateFlow
 /** The screens' handle on the shared TvLink; it holds the connection open while a screen is visible. */
 class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val link = (app as MyTvApp).link
+    private val updater = (app as MyTvApp).updater
     val state: StateFlow<UiState> = link.state
+    val update: StateFlow<UpdateState> = updater.state
+
+    fun checkForUpdate(manual: Boolean = false) = updater.check(manual)
+
+    fun installUpdate(context: android.content.Context) = updater.install(context)
+
+    fun dismissUpdate() = updater.dismiss()
     val messages: Flow<String> = link.messages
 
     fun start() = link.acquire(HOLDER)

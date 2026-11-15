@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         vm.start()
+        vm.checkForUpdate()
     }
 
     override fun onStop() {

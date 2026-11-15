@@ -57,12 +57,14 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SettingsRemote
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.NavigationBar
@@ -101,6 +103,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -148,7 +151,12 @@ fun RemoteApp(vm: RemoteViewModel) {
         Box(Modifier.fillMaxSize().background(Palette.Background)) {
             Scaffold(
                 containerColor = Palette.Background,
-                topBar = { TopArea(state, vm) },
+                topBar = {
+                    Column {
+                        TopArea(state, vm)
+                        UpdateBanner(vm)
+                    }
+                },
                 bottomBar = { if (paired) BottomBar(section, onType) { section = it } },
                 snackbarHost = { SnackbarHost(snackbar) },
             ) { padding ->
@@ -274,6 +282,53 @@ private fun statusColor(state: UiState): Color = when (state.link) {
     Link.NOT_PAIRED -> Palette.Muted
 }
 
+/** Shown when a newer My Tv is published; Update downloads it and hands it to Android's installer. */
+@Composable
+private fun UpdateBanner(vm: RemoteViewModel) {
+    val update by vm.update.collectAsStateWithLifecycle()
+    val release = update.available ?: return
+    val busy = update.progress != null || update.installing
+    if (update.dismissed && !busy) return
+    val context = LocalContext.current
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        Modifier
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Palette.Raised)
+            .border(1.dp, Palette.Line, shape)
+            .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.SystemUpdate, null, tint = Palette.Indigo)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("My Tv ${release.versionName} is ready", color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                val detail = when {
+                    update.installing -> "Installing..."
+                    update.progress != null -> "Downloading ${update.progress}%"
+                    release.notes.isNotBlank() -> release.notes
+                    else -> "Your pairing and settings stay."
+                }
+                Text(detail, color = Palette.Muted, fontSize = 13.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            if (!busy) {
+                TextButton(onClick = vm::dismissUpdate) { Text("Later", color = Palette.Muted) }
+                Button(onClick = { vm.installUpdate(context) }) { Text("Update") }
+            }
+        }
+        update.progress?.let { percent ->
+            LinearProgressIndicator(
+                progress = { percent / 100f },
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp, end = 8.dp),
+                color = Palette.Indigo,
+                trackColor = Palette.Line,
+            )
+        }
+    }
+}
+
 @Composable
 private fun OverflowMenu(state: UiState, vm: RemoteViewModel) {
     var open by remember { mutableStateOf(false) }
@@ -313,6 +368,20 @@ private fun OverflowMenu(state: UiState, vm: RemoteViewModel) {
                     activity?.let { RemoteTileService.requestAdd(it, vm::notify) }
                 },
             )
+            val update by vm.update.collectAsStateWithLifecycle()
+            DropdownMenuItem(
+                text = {
+                    Column {
+                        Text("Check for updates")
+                        Text("Version ${update.installedName}", fontSize = 12.sp, color = Palette.Muted)
+                    }
+                },
+                leadingIcon = { Icon(Icons.Rounded.SystemUpdate, null) },
+                onClick = {
+                    open = false
+                    vm.checkForUpdate(manual = true)
+                },
+            )
             if (state.link != Link.NOT_PAIRED) {
                 DropdownMenuItem(
                     text = { Text("Pair again") },
@@ -335,7 +404,7 @@ private fun BottomBar(section: Section, onType: () -> Unit, onSelect: (Section) 
             val colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = Palette.Text,
                 selectedTextColor = Palette.Text,
-                indicatorColor = Palette.Indigo.copy(alpha = 0.22f),
+                indicatorColor = Palette.Indigo.copy(alpha = 0.30f),
                 unselectedIconColor = Palette.Muted,
                 unselectedTextColor = Palette.Muted,
             )
@@ -348,7 +417,7 @@ private fun BottomBar(section: Section, onType: () -> Unit, onSelect: (Section) 
     }
 }
 
-/** Same geometry as a selected tab (a 64 x 32 pill over a 12 sp label), filled with the accent. */
+/** An action, not a tab: an outlined accent pill, so only the filled pill marks the tab you're on. */
 @Composable
 private fun RowScope.TypeNavItem(onType: () -> Unit) {
     Column(
@@ -359,11 +428,11 @@ private fun RowScope.TypeNavItem(onType: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.size(64.dp, 32.dp).clip(CircleShape).background(Palette.accent()), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Keyboard, null, Modifier.size(24.dp), tint = Color.White)
+        Box(Modifier.size(64.dp, 32.dp).clip(CircleShape).border(1.5.dp, Palette.Indigo, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Keyboard, null, Modifier.size(24.dp), tint = Palette.Indigo)
         }
         Spacer(Modifier.height(4.dp))
-        Text("Type", fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
+        Text("Type", fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, color = Palette.Indigo)
     }
 }
 

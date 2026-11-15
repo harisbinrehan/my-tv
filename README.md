@@ -29,8 +29,24 @@ JDK 17, the Android SDK (platform 35, build-tools 35) at the path in `local.prop
 
 ## Install on the phone
 
-Copy the newest APK from `Apps/` to the phone (or serve the folder on the home Wi-Fi and open it in the phone's
-browser), allow the browser or file manager to install apps when Android asks, and install it.
+The first time, copy the newest APK from `Apps/` (or from this repo's Releases) to the phone and install it,
+allowing the file manager to install apps when Android asks. From version 9 on, the app updates itself.
+
+## Updates
+
+Version 9 and later check this repo's latest release when opened and show **Update available** when it is
+newer. Update downloads the APK, checks its SHA-256 against the release's `update.json`, and hands it to
+Android's installer, which asks to confirm and only accepts an APK signed with the same key as the installed
+app; pairing and settings carry over. **Check for updates** in the menu checks on demand.
+
+To publish a version: bump `versionCode` and `versionName` in `app/build.gradle.kts`, then
+
+```bash
+./release.sh "What's new, one short line"
+```
+
+It builds the APK (`build.sh`) if needed and creates the GitHub release `v<versionCode>` with the APK and
+`update.json`.
 
 ## Pair
 

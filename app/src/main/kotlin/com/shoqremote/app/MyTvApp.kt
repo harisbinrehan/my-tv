@@ -6,9 +6,12 @@ import android.app.Application
 class MyTvApp : Application() {
     lateinit var link: TvLink
         private set
+    lateinit var updater: Updater
+        private set
 
     override fun onCreate() {
         super.onCreate()
         link = TvLink(this)
+        updater = Updater(this, link::notify)
     }
 }
