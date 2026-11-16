@@ -90,7 +90,8 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
     }
     LazyColumn(
         Modifier.fillMaxSize().imePadding(),
-        contentPadding = PaddingValues(16.dp),
+        // The bottom gap keeps the floating remote button clear of the last row's star.
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {

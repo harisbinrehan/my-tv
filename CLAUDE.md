@@ -33,7 +33,17 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 11: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 13: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Versions 12 and 13 (owner's layout requests, 2026-11-16)
+
+- The remote button is a floating button (bottom right, above the bar) on Apps and TV only; the header has power
+  and the menu. Lists keep 96 dp at the bottom so it never covers a row.
+- The remote page is laid out for one thumb: controls anchored to the bottom (Voice, Mute, Rewind, Forward; wide
+  VOL and CH pills; arrows and OK; Back, Play/Pause, Home lowest). The Menu (≡) key was removed at the owner's
+  request; TV settings moved to the ⋮ menu (shown while connected). Type lives only in the bottom bar.
+- Updates show as a slim strip (Update, ×), which opens a sheet with the notes and Later or Update now; while
+  updating the strip shows progress. Cancelling Android's prompt brings the strip back.
 
 ### Version 11 (owner's layout requests, 2026-11-16)
 

@@ -67,7 +67,8 @@ internal fun AppsPage(state: UiState, vm: RemoteViewModel) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 100.dp),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        // The bottom gap keeps the floating remote button clear of the last row.
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

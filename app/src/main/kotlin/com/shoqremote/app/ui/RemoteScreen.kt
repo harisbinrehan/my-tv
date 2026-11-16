@@ -7,11 +7,21 @@ import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.draw.shadow
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -53,7 +63,6 @@ import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LiveTv
-import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.NotificationsActive
@@ -119,7 +128,6 @@ import com.shoqremote.app.POWER_TARGET
 import com.shoqremote.app.PairingStep
 import com.shoqremote.app.RemoteTileService
 import com.shoqremote.app.RemoteViewModel
-import com.shoqremote.app.SETTINGS_PACKAGE
 import com.shoqremote.app.TvLinkService
 import com.shoqremote.app.UiState
 import com.shoqremote.atv.Keys
@@ -160,17 +168,27 @@ fun RemoteApp(vm: RemoteViewModel) {
                 containerColor = Palette.Background,
                 topBar = {
                     Column {
-                        TopArea(state, vm, onRemote = section == Section.REMOTE) { section = Section.REMOTE }
+                        TopArea(state, vm)
                         UpdateBanner(vm)
                     }
                 },
                 bottomBar = { if (paired) BottomBar(section, onType) { section = it } },
+                floatingActionButton = {
+                    // Only where it leads somewhere: on the remote itself it would do nothing.
+                    AnimatedVisibility(
+                        paired && section != Section.REMOTE,
+                        enter = scaleIn() + fadeIn(),
+                        exit = scaleOut() + fadeOut(),
+                    ) {
+                        RemoteFab { section = Section.REMOTE }
+                    }
+                },
                 snackbarHost = { SnackbarHost(snackbar) },
             ) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     when {
                         !paired -> PairingPanel(state, vm)
-                        section == Section.REMOTE -> RemotePage(state, vm, onVoice, onType)
+                        section == Section.REMOTE -> RemotePage(state, vm, onVoice)
                         section == Section.APPS -> AppsPage(state, vm)
                         section == Section.TV -> TvPage(state, vm)
                     }
@@ -185,7 +203,7 @@ fun RemoteApp(vm: RemoteViewModel) {
 }
 
 @Composable
-private fun TopArea(state: UiState, vm: RemoteViewModel, onRemote: Boolean, openRemote: () -> Unit) {
+private fun TopArea(state: UiState, vm: RemoteViewModel) {
     val paired = state.link != Link.NOT_PAIRED
     Row(
         Modifier
@@ -201,16 +219,7 @@ private fun TopArea(state: UiState, vm: RemoteViewModel, onRemote: Boolean, open
             Text("My Tv", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Palette.Text)
             StatusLine(state)
         }
-        if (paired) {
-            // Only where it leads somewhere: on the remote itself it would do nothing.
-            AnimatedVisibility(!onRemote, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
-                Row {
-                    RemoteButton(openRemote)
-                    Spacer(Modifier.width(10.dp))
-                }
-            }
-            PowerButton(state, vm::power)
-        }
+        if (paired) PowerButton(state, vm::power)
         OverflowMenu(state, vm)
     }
 }
@@ -241,22 +250,23 @@ private fun PowerButton(state: UiState, onClick: () -> Unit) {
     }
 }
 
-/** Back to the remote from Apps or TV; hidden on the remote page itself. */
+/** Floats above the bottom bar on Apps and TV and goes back to the remote; the remote page itself has none. */
 @Composable
-private fun RemoteButton(onClick: () -> Unit) {
+private fun RemoteFab(onClick: () -> Unit) {
     val view = LocalView.current
     Box(
         Modifier
-            .size(44.dp)
+            .size(60.dp)
+            .shadow(10.dp, CircleShape, ambientColor = Palette.Indigo, spotColor = Palette.Indigo)
             .clip(CircleShape)
-            .background(Palette.Raised)
-            .clickable(onClickLabel = "Remote", role = Role.Button) {
+            .background(Palette.accent())
+            .clickable(onClickLabel = "Open the remote", role = Role.Button) {
                 view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 onClick()
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Rounded.SettingsRemote, "Remote", Modifier.size(22.dp), tint = Palette.Text)
+        Icon(Icons.Rounded.SettingsRemote, "Remote", Modifier.size(28.dp), tint = Color.White)
     }
 }
 
@@ -287,7 +297,11 @@ private fun statusColor(state: UiState): Color = when (state.link) {
     Link.NOT_PAIRED -> Palette.Muted
 }
 
-/** Shown when a newer My Tv is published; Update downloads it and hands it to Android's installer. */
+/**
+ * A slim strip when a newer My Tv is published, so it never crowds the remote: Update starts it, the strip
+ * opens the details (what's new, Later, Update now), and while it runs a progress bar takes the buttons' place.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun UpdateBanner(vm: RemoteViewModel) {
     val update by vm.update.collectAsStateWithLifecycle()
@@ -295,41 +309,117 @@ private fun UpdateBanner(vm: RemoteViewModel) {
     val busy = update.progress != null || update.installing
     if (update.dismissed && !busy) return
     val context = LocalContext.current
-    val shape = RoundedCornerShape(20.dp)
+    var details by rememberSaveable { mutableStateOf(false) }
+    val shape = RoundedCornerShape(18.dp)
     Column(
         Modifier
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .fillMaxWidth()
             .clip(shape)
-            .background(Palette.Raised)
-            .border(1.dp, Palette.Line, shape)
-            .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+            .background(Palette.Panel)
+            .border(1.dp, Palette.Indigo.copy(alpha = 0.35f), shape)
+            .clickable(enabled = !busy, onClickLabel = "What's new") { details = true },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.SystemUpdate, null, tint = Palette.Indigo)
+        Row(
+            Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(Palette.Indigo.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.SystemUpdate, null, Modifier.size(20.dp), tint = Palette.Indigo)
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("My Tv ${release.versionName} is ready", color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                val detail = when {
-                    update.installing -> "Installing..."
-                    update.progress != null -> "Downloading ${update.progress}%"
-                    release.notes.isNotBlank() -> release.notes
-                    else -> "Your pairing and settings stay."
-                }
-                Text(detail, color = Palette.Muted, fontSize = 13.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (update.installing) "Installing update" else if (busy) "Downloading update" else "Update ready",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Palette.Text,
+                    maxLines = 1,
+                )
+                Text(
+                    when {
+                        update.installing -> "My Tv ${release.versionName}: confirm on the next screen"
+                        busy -> "My Tv ${release.versionName}: ${update.progress}%"
+                        else -> "My Tv ${release.versionName}  ·  What's new ›"
+                    },
+                    fontSize = 12.sp,
+                    color = Palette.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            if (!busy) {
-                TextButton(onClick = vm::dismissUpdate) { Text("Later", color = Palette.Muted) }
-                Button(onClick = { vm.installUpdate(context) }) { Text("Update") }
+            if (busy) {
+                CircularProgressIndicator(Modifier.padding(end = 12.dp).size(20.dp), strokeWidth = 2.dp, color = Palette.Indigo)
+            } else {
+                Button(
+                    onClick = { vm.installUpdate(context) },
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                    modifier = Modifier.height(36.dp),
+                ) { Text("Update", fontSize = 14.sp) }
+                IconButton(onClick = vm::dismissUpdate) { Icon(Icons.Rounded.Close, "Later", tint = Palette.Muted) }
             }
         }
         update.progress?.let { percent ->
             LinearProgressIndicator(
                 progress = { percent / 100f },
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp, end = 8.dp),
+                modifier = Modifier.fillMaxWidth().height(3.dp),
                 color = Palette.Indigo,
                 trackColor = Palette.Line,
+                drawStopIndicator = {},
             )
+        }
+    }
+    if (details && !busy) {
+        ModalBottomSheet(
+            onDismissRequest = { details = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Palette.Sheet,
+        ) {
+            Column(
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Logo(44.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text("My Tv ${release.versionName}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Palette.Text)
+                        Text("You have ${update.installedName}", fontSize = 13.sp, color = Palette.Muted)
+                    }
+                }
+                if (release.notes.isNotBlank()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("What's new", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.Indigo)
+                        Text(release.notes, fontSize = 15.sp, lineHeight = 22.sp, color = Palette.Text)
+                    }
+                }
+                Text(
+                    "Your pairing and settings stay. My Tv closes while it updates; open it again when it's done.",
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = Palette.Muted,
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            details = false
+                            vm.dismissUpdate()
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        border = BorderStroke(1.dp, Palette.Line),
+                    ) { Text("Later", color = Palette.Text) }
+                    Button(
+                        onClick = {
+                            details = false
+                            vm.installUpdate(context)
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                    ) { Text("Update now") }
+                }
+            }
         }
     }
 }
@@ -373,6 +463,16 @@ private fun OverflowMenu(state: UiState, vm: RemoteViewModel) {
                     activity?.let { RemoteTileService.requestAdd(it, vm::notify) }
                 },
             )
+            if (state.link == Link.CONNECTED) {
+                DropdownMenuItem(
+                    text = { Text("TV settings") },
+                    leadingIcon = { Icon(Icons.Rounded.Settings, null) },
+                    onClick = {
+                        open = false
+                        vm.openTvSettings()
+                    },
+                )
+            }
             val update by vm.update.collectAsStateWithLifecycle()
             DropdownMenuItem(
                 text = {
@@ -476,56 +576,49 @@ private fun ListeningBanner(modifier: Modifier, onStop: () -> Unit) {
     }
 }
 
-/** Sized from the space available so the whole remote fits on screen without scrolling. */
+/**
+ * Built for one thumb: the controls sit at the bottom of the screen with the most used (arrows, OK, Back, Home)
+ * lowest, and any spare height stays above them. Sized from the space available, so it never scrolls.
+ */
 @Composable
-private fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit, onType: () -> Unit) {
+private fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit) {
     val onKey: (Int, Int) -> Unit = vm::key
     val muted = state.volume?.muted == true
-    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 6.dp)) {
-        val compact = maxHeight < 600.dp
-        val rockerKey = if (compact) 54.dp else 66.dp
-        val navKey = if (compact) 54.dp else 64.dp
-        val quickRow = if (compact) 72.dp else 82.dp
-        val dpad = (maxHeight - quickRow - navKey - (rockerKey * 2 + 22.dp) - 36.dp)
-            .coerceIn(160.dp, 300.dp)
-            .coerceAtMost(maxWidth - 16.dp)
+    BoxWithConstraints(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 14.dp)) {
+        val compact = maxHeight < 560.dp
+        val gap = if (compact) 12.dp else 18.dp
+        val pill = if (compact) 52.dp else 58.dp
+        val navKey = if (compact) 58.dp else 68.dp
+        val quickRow = 76.dp
+        val dpad = (maxHeight - quickRow - pill - navKey - gap * 3)
+            .coerceIn(170.dp, 300.dp)
+            .coerceAtMost(maxWidth - 24.dp)
         Column(
             Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceEvenly,
+            verticalArrangement = Arrangement.spacedBy(gap, Alignment.Bottom),
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                ActionButton(Icons.Rounded.Keyboard, "Type", accent = true, onClick = onType)
                 ActionButton(Icons.Rounded.Mic, if (state.listening) "Listening" else "Voice", selected = state.listening, onClick = onVoice)
                 ActionButton(
                     if (muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
                     if (muted) "Unmute" else "Mute",
                     selected = muted,
                 ) { vm.key(Keys.VOLUME_MUTE) }
-                ActionButton(Icons.Rounded.Settings, "Settings", busy = state.opening == SETTINGS_PACKAGE, onClick = vm::openTvSettings)
+                ActionButton(Icons.Rounded.FastRewind, "Rewind") { vm.key(Keys.MEDIA_REWIND) }
+                ActionButton(Icons.Rounded.FastForward, "Forward") { vm.key(Keys.MEDIA_FAST_FORWARD) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Rocker(onKey, Keys.VOLUME_DOWN, Keys.VOLUME_UP, "VOL", Icons.Rounded.Remove, Icons.Rounded.Add, Modifier.weight(1f).height(pill), repeat = true)
+                Rocker(onKey, Keys.CHANNEL_DOWN, Keys.CHANNEL_UP, "CH", Icons.Rounded.KeyboardArrowDown, Icons.Rounded.KeyboardArrowUp, Modifier.weight(1f).height(pill))
             }
             DPad(onKey, dpad)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 RoundKey(onKey, Keys.BACK, Icons.AutoMirrored.Rounded.ArrowBack, "Back", navKey)
-                RoundKey(onKey, Keys.HOME, Icons.Rounded.Home, "Home", navKey)
-                RoundKey(onKey, Keys.MENU, Icons.Rounded.Menu, "Menu", navKey)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Rocker(onKey, Keys.VOLUME_UP, Keys.VOLUME_DOWN, "VOL", Icons.Rounded.Add, Icons.Rounded.Remove, rockerKey, repeat = true)
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    KeyButton(onKey, Keys.MEDIA_PLAY_PAUSE, "Play or pause", Modifier.size(rockerKey + 8.dp), color = Palette.Raised) {
-                        Icon(Icons.Rounded.PlayArrow, null, Modifier.size(34.dp), tint = Palette.Text)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        KeyButton(onKey, Keys.MEDIA_REWIND, "Rewind", Modifier.size(rockerKey - 14.dp)) {
-                            Icon(Icons.Rounded.FastRewind, null, Modifier.size(22.dp), tint = Palette.Text)
-                        }
-                        KeyButton(onKey, Keys.MEDIA_FAST_FORWARD, "Fast forward", Modifier.size(rockerKey - 14.dp)) {
-                            Icon(Icons.Rounded.FastForward, null, Modifier.size(22.dp), tint = Palette.Text)
-                        }
-                    }
+                KeyButton(onKey, Keys.MEDIA_PLAY_PAUSE, "Play or pause", Modifier.size(navKey), color = Palette.Raised) {
+                    Icon(Icons.Rounded.PlayArrow, null, Modifier.size(32.dp), tint = Palette.Text)
                 }
-                Rocker(onKey, Keys.CHANNEL_UP, Keys.CHANNEL_DOWN, "CH", Icons.Rounded.KeyboardArrowUp, Icons.Rounded.KeyboardArrowDown, rockerKey)
+                RoundKey(onKey, Keys.HOME, Icons.Rounded.Home, "Home", navKey)
             }
         }
     }
@@ -614,31 +707,29 @@ private fun RoundKey(onKey: (Int, Int) -> Unit, code: Int, icon: ImageVector, la
         Icon(icon, null, Modifier.size(28.dp), tint = Palette.Text)
     }
 
+/** A wide two-way key, lower on the left and higher on the right, with its name in the middle. */
 @Composable
 private fun Rocker(
     onKey: (Int, Int) -> Unit,
-    up: Int,
     down: Int,
+    up: Int,
     label: String,
-    upIcon: ImageVector,
     downIcon: ImageVector,
-    keyHeight: Dp,
+    upIcon: ImageVector,
+    modifier: Modifier,
     repeat: Boolean = false,
 ) {
-    Column(
-        Modifier
-            .width(78.dp)
-            .clip(RoundedCornerShape(39.dp))
-            .background(Palette.Panel)
-            .border(1.dp, Palette.Line, RoundedCornerShape(39.dp)),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    val shape = RoundedCornerShape(percent = 50)
+    Row(
+        modifier.clip(shape).background(Palette.Panel).border(1.dp, Palette.Line, shape),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        KeyButton(onKey, up, "$label up", Modifier.fillMaxWidth().height(keyHeight), shape = RectangleShape, color = Color.Transparent, repeat = repeat) {
-            Icon(upIcon, null, tint = Palette.Text)
+        KeyButton(onKey, down, "$label down", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent, repeat = repeat) {
+            Icon(downIcon, null, tint = Palette.Text)
         }
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.Muted)
-        KeyButton(onKey, down, "$label down", Modifier.fillMaxWidth().height(keyHeight), shape = RectangleShape, color = Color.Transparent, repeat = repeat) {
-            Icon(downIcon, null, tint = Palette.Text)
+        KeyButton(onKey, up, "$label up", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent, repeat = repeat) {
+            Icon(upIcon, null, tint = Palette.Text)
         }
     }
 }
