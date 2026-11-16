@@ -4,9 +4,12 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.view.HapticFeedbackConstants
+import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -121,6 +124,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shoqremote.app.fallbackLabel
 import com.shoqremote.app.Background
 import com.shoqremote.app.HOME_PACKAGE
 import com.shoqremote.app.Link
@@ -133,7 +137,7 @@ import com.shoqremote.app.UiState
 import com.shoqremote.atv.Keys
 import com.shoqremote.atv.ShoqBox
 
-/** The remote is the home page, opened from the header; Apps and TV are the bottom bar's sections. */
+/** The bottom bar's sections; the remote is the home page, between Apps and TV. */
 private enum class Section { REMOTE, APPS, TV }
 
 @Composable
@@ -172,15 +176,10 @@ fun RemoteApp(vm: RemoteViewModel) {
                         UpdateBanner(vm)
                     }
                 },
-                bottomBar = { if (paired) BottomBar(section, onType) { section = it } },
+                bottomBar = { if (paired) BottomBar(section) { section = it } },
                 floatingActionButton = {
-                    // Only where it leads somewhere: on the remote itself it would do nothing.
-                    AnimatedVisibility(
-                        paired && section != Section.REMOTE,
-                        enter = scaleIn() + fadeIn(),
-                        exit = scaleOut() + fadeOut(),
-                    ) {
-                        RemoteFab { section = Section.REMOTE }
+                    AnimatedVisibility(paired && !typing, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
+                        TypeFab(onType)
                     }
                 },
                 snackbarHost = { SnackbarHost(snackbar) },
@@ -250,23 +249,24 @@ private fun PowerButton(state: UiState, onClick: () -> Unit) {
     }
 }
 
-/** Floats above the bottom bar on Apps and TV and goes back to the remote; the remote page itself has none. */
+/** Typing is the most used feature, so it floats above the bottom bar on every page, one tap away. */
 @Composable
-private fun RemoteFab(onClick: () -> Unit) {
+private fun TypeFab(onClick: () -> Unit) {
     val view = LocalView.current
+    val shape = RoundedCornerShape(18.dp)
     Box(
         Modifier
-            .size(60.dp)
-            .shadow(10.dp, CircleShape, ambientColor = Palette.Indigo, spotColor = Palette.Indigo)
-            .clip(CircleShape)
+            .size(56.dp)
+            .shadow(10.dp, shape, ambientColor = Palette.Indigo, spotColor = Palette.Indigo)
+            .clip(shape)
             .background(Palette.accent())
-            .clickable(onClickLabel = "Open the remote", role = Role.Button) {
+            .clickable(onClickLabel = "Type on the TV", role = Role.Button) {
                 view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 onClick()
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Rounded.SettingsRemote, "Remote", Modifier.size(28.dp), tint = Color.White)
+        Icon(Icons.Rounded.Keyboard, "Type", Modifier.size(26.dp), tint = Color.White)
     }
 }
 
@@ -502,7 +502,7 @@ private fun OverflowMenu(state: UiState, vm: RemoteViewModel) {
 }
 
 @Composable
-private fun BottomBar(section: Section, onType: () -> Unit, onSelect: (Section) -> Unit) {
+private fun BottomBar(section: Section, onSelect: (Section) -> Unit) {
     Column {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.Line))
         NavigationBar(containerColor = Palette.Panel, tonalElevation = 0.dp) {
@@ -514,28 +514,9 @@ private fun BottomBar(section: Section, onType: () -> Unit, onSelect: (Section) 
                 unselectedTextColor = Palette.Muted,
             )
             NavItem(section, Section.APPS, Icons.Rounded.Apps, "Apps", colors, onSelect)
-            TypeNavItem(onType)
+            NavItem(section, Section.REMOTE, Icons.Rounded.SettingsRemote, "Remote", colors, onSelect)
             NavItem(section, Section.TV, Icons.Rounded.LiveTv, "TV", colors, onSelect)
         }
-    }
-}
-
-/** An action, not a tab: an outlined accent pill, so only the filled pill marks the tab you're on. */
-@Composable
-private fun RowScope.TypeNavItem(onType: () -> Unit) {
-    Column(
-        Modifier
-            .weight(1f)
-            .height(80.dp)
-            .clickable(onClickLabel = "Type on TV", role = Role.Button, onClick = onType),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Box(Modifier.size(64.dp, 32.dp).clip(CircleShape).border(1.5.dp, Palette.Indigo, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Keyboard, null, Modifier.size(24.dp), tint = Palette.Indigo)
-        }
-        Spacer(Modifier.height(4.dp))
-        Text("Type", fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, color = Palette.Indigo)
     }
 }
 
@@ -577,20 +558,23 @@ private fun ListeningBanner(modifier: Modifier, onStop: () -> Unit) {
 }
 
 /**
- * Built for one thumb: the controls sit at the bottom of the screen with the most used (arrows, OK, Back, Home)
- * lowest, and any spare height stays above them. Sized from the space available, so it never scrolls.
+ * Built for one thumb and grouped by job: what's on the TV at the top (when there's room), then sound and
+ * channels, the arrows, Back / Voice / Home, and the media keys lowest, beside the floating Type button. Sized from
+ * the space available, so it never scrolls.
  */
 @Composable
 private fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit) {
     val onKey: (Int, Int) -> Unit = vm::key
     val muted = state.volume?.muted == true
-    BoxWithConstraints(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 14.dp)) {
-        val compact = maxHeight < 560.dp
-        val gap = if (compact) 12.dp else 18.dp
-        val pill = if (compact) 52.dp else 58.dp
-        val navKey = if (compact) 58.dp else 68.dp
-        val quickRow = 76.dp
-        val dpad = (maxHeight - quickRow - pill - navKey - gap * 3)
+    BoxWithConstraints(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 16.dp)) {
+        val compact = maxHeight < 600.dp
+        val gap = if (compact) 12.dp else 16.dp
+        val row = if (compact) 50.dp else 56.dp
+        val navKey = if (compact) 56.dp else 64.dp
+        val fixed = row * 2 + navKey + gap * 3
+        // The card only shows when the arrows still get 250 dp.
+        val showNow = maxHeight - fixed - NOW_CARD - gap >= 250.dp
+        val dpad = (maxHeight - fixed - if (showNow) NOW_CARD + gap else 0.dp)
             .coerceIn(170.dp, 300.dp)
             .coerceAtMost(maxWidth - 24.dp)
         Column(
@@ -598,63 +582,124 @@ private fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit)
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(gap, Alignment.Bottom),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                ActionButton(Icons.Rounded.Mic, if (state.listening) "Listening" else "Voice", selected = state.listening, onClick = onVoice)
-                ActionButton(
+            if (showNow) {
+                NowOnTv(state)
+                Spacer(Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                RoundToggle(
                     if (muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
                     if (muted) "Unmute" else "Mute",
                     selected = muted,
+                    size = row,
                 ) { vm.key(Keys.VOLUME_MUTE) }
-                ActionButton(Icons.Rounded.FastRewind, "Rewind") { vm.key(Keys.MEDIA_REWIND) }
-                ActionButton(Icons.Rounded.FastForward, "Forward") { vm.key(Keys.MEDIA_FAST_FORWARD) }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Rocker(onKey, Keys.VOLUME_DOWN, Keys.VOLUME_UP, "VOL", Icons.Rounded.Remove, Icons.Rounded.Add, Modifier.weight(1f).height(pill), repeat = true)
-                Rocker(onKey, Keys.CHANNEL_DOWN, Keys.CHANNEL_UP, "CH", Icons.Rounded.KeyboardArrowDown, Icons.Rounded.KeyboardArrowUp, Modifier.weight(1f).height(pill))
+                Rocker(onKey, Keys.VOLUME_DOWN, Keys.VOLUME_UP, "VOL", Icons.Rounded.Remove, Icons.Rounded.Add, Modifier.weight(1f).height(row), repeat = true)
+                Rocker(onKey, Keys.CHANNEL_DOWN, Keys.CHANNEL_UP, "CH", Icons.Rounded.KeyboardArrowDown, Icons.Rounded.KeyboardArrowUp, Modifier.weight(1f).height(row))
             }
             DPad(onKey, dpad)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 RoundKey(onKey, Keys.BACK, Icons.AutoMirrored.Rounded.ArrowBack, "Back", navKey)
-                KeyButton(onKey, Keys.MEDIA_PLAY_PAUSE, "Play or pause", Modifier.size(navKey), color = Palette.Raised) {
-                    Icon(Icons.Rounded.PlayArrow, null, Modifier.size(32.dp), tint = Palette.Text)
-                }
+                RoundToggle(Icons.Rounded.Mic, if (state.listening) "Stop voice search" else "Voice search", selected = state.listening, size = navKey, onClick = onVoice)
                 RoundKey(onKey, Keys.HOME, Icons.Rounded.Home, "Home", navKey)
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                MediaBar(onKey, Modifier.weight(1f).height(row))
+                // The floating Type button sits here, in line with the media keys.
+                Spacer(Modifier.width(72.dp))
             }
         }
     }
 }
 
+private val NOW_CARD = 68.dp
+
+/** What the TV is showing, with the app's icon, and the volume as a bar. */
 @Composable
-internal fun ActionButton(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean = false,
-    busy: Boolean = false,
-    accent: Boolean = false,
-    onClick: () -> Unit,
-) {
-    val view = LocalView.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier
-                .size(54.dp)
-                .clip(CircleShape)
-                .then(if (selected) Modifier.background(Palette.accent()) else Modifier.background(Palette.Raised))
-                .border(1.dp, if (accent) Palette.Indigo.copy(alpha = 0.5f) else Palette.Line, CircleShape)
-                .clickable(onClickLabel = label, role = Role.Button) {
-                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                    onClick()
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            if (busy) {
-                CircularProgressIndicator(Modifier.size(22.dp), color = Palette.Text, strokeWidth = 2.dp)
+private fun NowOnTv(state: UiState) {
+    val app = state.currentApp
+    val connected = state.link == Link.CONNECTED
+    val on = connected && state.power != false
+    val title = when {
+        !connected -> "Not connected"
+        !on -> "TV in standby"
+        app == null || app == HOME_PACKAGE -> "Home screen"
+        else -> state.meta[app]?.label ?: fallbackLabel(app)
+    }
+    val path = app?.takeIf { on }?.let { state.meta[it]?.iconPath }
+    val icon = remember(path) { path?.let { BitmapFactory.decodeFile(it)?.asImageBitmap() } }
+    val volume = state.volume?.takeIf { on }
+    Row(
+        Modifier.fillMaxWidth().height(NOW_CARD).clip(RoundedCornerShape(20.dp)).background(Palette.Panel).padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Palette.Raised), contentAlignment = Alignment.Center) {
+            if (icon != null) {
+                Image(icon, null, Modifier.fillMaxSize())
             } else {
-                Icon(icon, label, Modifier.size(24.dp), tint = if (accent && !selected) Palette.Indigo else Palette.Text)
+                Icon(
+                    if (!on) Icons.Rounded.PowerSettingsNew else if (app == null || app == HOME_PACKAGE) Icons.Rounded.Home else Icons.Rounded.LiveTv,
+                    null,
+                    Modifier.size(22.dp),
+                    tint = Palette.Muted,
+                )
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(label, fontSize = 11.sp, color = Palette.Muted)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold, color = Palette.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (volume != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LinearProgressIndicator(
+                        progress = { if (volume.muted || volume.max <= 0) 0f else volume.level.toFloat() / volume.max },
+                        modifier = Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                        color = Palette.Indigo,
+                        trackColor = Palette.Line,
+                        drawStopIndicator = {},
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(if (volume.muted) "Muted" else "${volume.level}", fontSize = 12.sp, color = Palette.Muted)
+                }
+            } else {
+                Text(if (on) "On your TV" else "Tap power to turn it on", fontSize = 12.sp, color = Palette.Muted)
+            }
+        }
+    }
+}
+
+/** A round on/off key: filled with the accent while on (muted, listening), its icon showing the current state. */
+@Composable
+private fun RoundToggle(icon: ImageVector, label: String, selected: Boolean, size: Dp, onClick: () -> Unit) {
+    val view = LocalView.current
+    Box(
+        Modifier
+            .size(size)
+            .clip(CircleShape)
+            .then(if (selected) Modifier.background(Palette.accent()) else Modifier.background(Palette.Raised))
+            .border(1.dp, if (selected) Color.Transparent else Palette.Line, CircleShape)
+            .clickable(onClickLabel = label, role = Role.Button) {
+                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, label, Modifier.size(24.dp), tint = Palette.Text)
+    }
+}
+
+/** Rewind, play or pause, and fast forward as one bar. */
+@Composable
+private fun MediaBar(onKey: (Int, Int) -> Unit, modifier: Modifier) {
+    val shape = RoundedCornerShape(percent = 50)
+    Row(modifier.clip(shape).background(Palette.Panel).border(1.dp, Palette.Line, shape), verticalAlignment = Alignment.CenterVertically) {
+        KeyButton(onKey, Keys.MEDIA_REWIND, "Rewind", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {
+            Icon(Icons.Rounded.FastRewind, null, Modifier.size(24.dp), tint = Palette.Text)
+        }
+        KeyButton(onKey, Keys.MEDIA_PLAY_PAUSE, "Play or pause", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {
+            Icon(Icons.Rounded.PlayArrow, null, Modifier.size(30.dp), tint = Palette.Text)
+        }
+        KeyButton(onKey, Keys.MEDIA_FAST_FORWARD, "Fast forward", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {
+            Icon(Icons.Rounded.FastForward, null, Modifier.size(24.dp), tint = Palette.Text)
+        }
     }
 }
 

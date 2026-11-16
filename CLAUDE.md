@@ -33,7 +33,15 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 13: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 14: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 14 (owner's layout requests, 2026-11-16)
+
+- Bottom bar: Apps, Remote, TV (the remote is a normal tab again). Type is a floating button (bottom right) on
+  every page, hidden while the typing panel is open; the remote page leaves its slot free beside the media bar.
+- Remote page, top to bottom: a "Now on TV" card (app icon, name, volume bar) when the arrows still get 250 dp;
+  Mute with wide VOL and CH; the arrows and OK; Back, Voice, Home; Rewind / Play-pause / Forward as one bar.
+- Mute icons show the state everywhere (crossed speaker while muted), notification included; labels say the action.
 
 ### Versions 12 and 13 (owner's layout requests, 2026-11-16)
 

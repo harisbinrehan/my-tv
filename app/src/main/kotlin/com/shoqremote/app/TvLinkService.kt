@@ -163,7 +163,7 @@ class TvLinkService : Service() {
                 builder.addAction(action(R.drawable.ic_n_rewind, "Rewind", Keys.MEDIA_REWIND))
                 builder.addAction(action(if (card.playing) R.drawable.ic_n_pause else R.drawable.ic_n_play, "Play or pause", Keys.MEDIA_PLAY_PAUSE))
                 builder.addAction(action(R.drawable.ic_n_ff, "Fast forward", Keys.MEDIA_FAST_FORWARD))
-                builder.addAction(action(if (card.muted) R.drawable.ic_n_unmute else R.drawable.ic_n_mute, if (card.muted) "Unmute" else "Mute", Keys.VOLUME_MUTE))
+                builder.addAction(action(if (card.muted) R.drawable.ic_n_mute else R.drawable.ic_n_unmute, if (card.muted) "Unmute" else "Mute", Keys.VOLUME_MUTE))
                 builder.addAction(powerAction("Turn TV off", ACTION_POWER, POWER_REQUEST))
                 style.setShowActionsInCompactView(0, 1, 2)
             }
@@ -194,7 +194,7 @@ class TvLinkService : Service() {
                     PlaybackState.CustomAction.Builder(
                         CUSTOM_MUTE,
                         if (card.muted) "Unmute" else "Mute",
-                        if (card.muted) R.drawable.ic_n_unmute else R.drawable.ic_n_mute,
+                        if (card.muted) R.drawable.ic_n_mute else R.drawable.ic_n_unmute,
                     ).build(),
                 )
                 state.addCustomAction(PlaybackState.CustomAction.Builder(CUSTOM_POWER, "Turn TV off", R.drawable.ic_n_power).build())
