@@ -33,7 +33,19 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 15: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 16: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 16 (2026-11-16)
+
+- Home screen widgets (`Widgets.kt`, layouts `widget_*.xml`): TV power (1x1), Now playing (4x1: app, Mute,
+  Play/Pause, Power), Remote (3x4: Back, arrows, OK, Home, volume, Mute, Play/Pause, Power). Taps go to
+  `TvLinkService` as foreground-service intents; a tap before the connection is ready waits up to 5 s. The service
+  refreshes the widgets when what they show changes. With notification controls off, a widget tap starts the
+  service and it stops after a quiet minute. Menu: "Add a widget" (pins through Android's own dialog).
+  Tested on the emulator against the box: Mute from the widget muted and unmuted the TV, also after the app's
+  process was killed (Android restarted the service). A force-stopped app's widgets are disabled by Android until
+  the app is opened again.
+- Rename on app tiles; the no-Play-page hint (see section 9, item 7).
 
 ### Version 15 (owner's requests, 2026-11-16)
 
@@ -346,6 +358,16 @@ adb logcat -v time -s MyTv
    in every retest from a real standby (see the table in section 5), so v7 removed it and the pairing screen now
    says the box only lets a paired phone switch it on. `CastWake` stays in `atvremote` for the CLI only. Pairing
    survives updates; only uninstalling or clearing the app's data loses it.
+
+7. **NetMirror.** Not on the Play Store. The owner's voice ("Open NetMirror" via the mic) opens it. Generated speech
+   was tested 2026-11-16 and is unreliable: ending the voice stream right after the words makes the box cancel;
+   digital-zero silence keeps the Assistant waiting (faint noise fixes that), but "Open NetMirror" in a synthetic
+   voice opened Netflix once and only showed results the next time. `android-app://<package>` links are ignored.
+   While NetMirror was on screen the box reported `com.netflix.ninja`, so NetMirror may be installed under Netflix's
+   package; to confirm, ask what the Netflix tile opens. Apps Google Play has no page for (HTTP 404,
+   `Storage.noPlayPage`) now say "Tap the mic and say 'Open <name>'"; tiles can be renamed.
+   The Mac test identity lives in `~/Library/Application Support/MyTvCli/state` (re-paired 2026-11-16 21:3x).
+   **The box forgot that pairing when it restarted at 18:28**; check whether phones lose theirs too.
 
 ## 10. If this is a different Shoq box
 

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Now playing (4x1): what's on the TV, then Mute, Play or pause, and Power. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_widget"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="8dp">
+
+    <LinearLayout
+        android:id="@+id/w_open"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/w_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="My Tv"
+            android:textColor="#FFF4F4F6"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/w_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Tap to open"
+            android:textColor="#FF8E8E98"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/w_mute"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/bg_widget_key"
+        android:contentDescription="Mute"
+        android:padding="11dp"
+        android:src="@drawable/ic_n_unmute" />
+
+    <ImageView
+        android:id="@+id/w_play"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/bg_widget_key"
+        android:contentDescription="Play or pause"
+        android:padding="11dp"
+        android:src="@drawable/ic_n_play" />
+
+    <ImageView
+        android:id="@+id/w_power"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/bg_widget_power_off"
+        android:contentDescription="Turn the TV on or off"
+        android:padding="11dp"
+        android:src="@drawable/ic_n_power" />
+</LinearLayout>

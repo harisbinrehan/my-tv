@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">My Tv</string>
+    <string name="widget_power">TV power</string>
+    <string name="widget_power_description">Turn your TV on or off with one tap</string>
+    <string name="widget_now">Now playing</string>
+    <string name="widget_now_description">What\'s on your TV, with mute, play or pause, and power</string>
+    <string name="widget_remote">Remote</string>
+    <string name="widget_remote_description">Arrows, OK, Back, Home, volume and power on your home screen</string>
 </resources>

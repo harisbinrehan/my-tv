@@ -16,6 +16,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import com.shoqremote.atv.Keys
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +37,7 @@ class TvLinkService : Service() {
     private lateinit var notifications: NotificationManager
     private var playing = true
     private var shown: Card? = null
+    private var idleStop: Job? = null
 
     private enum class Mode { CONTROLS, POWER, NONE }
 
@@ -82,10 +87,23 @@ class TvLinkService : Service() {
         }
         shown = card
         link.acquire(HOLDER)
-        scope.launch { link.state.collect { render(cardOf(it)) } }
+        scope.launch {
+            link.state.collect {
+                render(cardOf(it))
+                Widgets.refresh(this@TvLinkService, it, playing)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A widget can start this even with notification controls off; then it stops again after a quiet minute.
+        if (!Storage(this).notificationControls) {
+            idleStop?.cancel()
+            idleStop = scope.launch {
+                delay(IDLE_STOP_MS)
+                stopSelf()
+            }
+        }
         when (intent?.action) {
             ACTION_KEY -> press(intent.getIntExtra(EXTRA_KEY, 0))
             ACTION_TURN_ON -> link.turnOn()
@@ -101,11 +119,21 @@ class TvLinkService : Service() {
         super.onDestroy()
     }
 
+    /** From the notification or a widget; a tap that beats the connection waits for it (5 s) instead of being lost. */
     private fun press(key: Int) {
         if (key == 0) return
         if (key == Keys.MEDIA_PLAY_PAUSE) playing = !playing
-        link.key(key)
+        if (link.state.value.link == Link.CONNECTED) {
+            link.key(key)
+        } else {
+            link.reconnectNow()
+            scope.launch {
+                withTimeoutOrNull(CONNECT_WAIT_MS) { link.state.first { it.link == Link.CONNECTED } }
+                link.key(key)
+            }
+        }
         render(cardOf(link.state.value))
+        Widgets.refresh(this, link.state.value, playing)
     }
 
     private fun cardOf(state: UiState): Card {
@@ -238,14 +266,22 @@ class TvLinkService : Service() {
         private const val NOTIFICATION_ID = 7
         private const val CHANNEL_ID = "tv_controls"
         private const val HOLDER = "notification"
-        private const val ACTION_KEY = "com.shoqremote.app.KEY"
+        const val ACTION_KEY = "com.shoqremote.app.KEY"
         private const val ACTION_TURN_ON = "com.shoqremote.app.TURN_ON"
-        private const val ACTION_POWER = "com.shoqremote.app.POWER"
+        const val ACTION_POWER = "com.shoqremote.app.POWER"
         private const val TURN_ON_REQUEST = 10_000
+        private const val IDLE_STOP_MS = 60_000L
+        private const val CONNECT_WAIT_MS = 5_000L
         private const val POWER_REQUEST = 10_001
-        private const val EXTRA_KEY = "key"
+        const val EXTRA_KEY = "key"
         private const val CUSTOM_MUTE = "mute"
         private const val CUSTOM_POWER = "power"
+
+        /** Starts the connection when the owner wants it kept (paired, notification controls on). */
+        fun startIfWanted(context: Context) {
+            val storage = Storage(context)
+            if (storage.paired && storage.notificationControls) start(context)
+        }
 
         fun start(context: Context) {
             runCatching { context.startForegroundService(Intent(context, TvLinkService::class.java)) }

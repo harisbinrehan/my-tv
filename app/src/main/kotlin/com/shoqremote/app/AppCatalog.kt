@@ -32,7 +32,13 @@ class AppCatalog(private val storage: Storage) {
 
     /** Blocking; null when the app has no Play Store page or the phone is offline. */
     fun fetch(packageName: String): AppMeta? = runCatching {
-        val page = get("https://play.google.com/store/apps/details?id=$packageName&hl=en&gl=US").toString(Charsets.UTF_8)
+        val page = try {
+            get("https://play.google.com/store/apps/details?id=$packageName&hl=en&gl=US").toString(Charsets.UTF_8)
+        } catch (e: NotOnPlay) {
+            // A definite "no such app" (not just offline): the Play Store can't open it, so it opens by voice.
+            storage.markNoPlayPage(packageName)
+            return null
+        }
         val title = meta(page, "og:title")?.let(::cleanTitle)?.takeIf { it.isNotBlank() } ?: return null
         val iconFile = storage.iconFile(packageName)
         meta(page, "og:image")?.let { image ->
@@ -50,6 +56,7 @@ class AppCatalog(private val storage: Storage) {
         connection.setRequestProperty("User-Agent", USER_AGENT)
         connection.setRequestProperty("Accept-Language", "en")
         try {
+            if (connection.responseCode == HttpURLConnection.HTTP_NOT_FOUND) throw NotOnPlay()
             if (connection.responseCode != HttpURLConnection.HTTP_OK) throw IOException("HTTP ${connection.responseCode}")
             return connection.inputStream.use { it.readBytes() }
         } finally {
@@ -65,6 +72,8 @@ class AppCatalog(private val storage: Storage) {
 
     private fun unescape(text: String): String =
         text.replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">")
+
+    private class NotOnPlay : IOException("not on Google Play")
 
     private companion object {
         const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"

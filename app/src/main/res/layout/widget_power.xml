@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TV power (1x1): one round button, green to turn on, red to turn off. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_widget"
+    android:padding="6dp">
+
+    <ImageView
+        android:id="@+id/w_power"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_widget_power_off"
+        android:contentDescription="Turn the TV on or off"
+        android:padding="13dp"
+        android:src="@drawable/ic_n_power" />
+</FrameLayout>

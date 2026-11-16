@@ -85,6 +85,11 @@ class Storage(context: Context) {
 
     fun label(packageName: String): String? = prefs.getString("label:$packageName", null)
 
+    /** Google Play has no page for this app (it was installed from elsewhere), so it opens by voice. */
+    fun noPlayPage(packageName: String): Boolean = prefs.getBoolean("noplay:$packageName", false)
+
+    fun markNoPlayPage(packageName: String) = prefs.edit().putBoolean("noplay:$packageName", true).apply()
+
     fun saveLabel(packageName: String, label: String) = prefs.edit().putString("label:$packageName", label).apply()
 
     fun iconFile(packageName: String): File = File(File(dir, "icons").apply { mkdirs() }, packageName)

@@ -24,6 +24,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Shop
 import androidx.compose.material.icons.rounded.Delete
@@ -113,6 +117,13 @@ private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, open: (Str
     val view = LocalView.current
     val favourite = pkg in state.favourites
     var menu by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    if (renaming) {
+        RenameDialog(state.meta[pkg]?.label ?: fallbackLabel(pkg), onDismiss = { renaming = false }) { name ->
+            vm.renameApp(pkg, name)
+            renaming = false
+        }
+    }
     Box {
         Column(
             Modifier
@@ -152,6 +163,14 @@ private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, open: (Str
                 onClick = {
                     menu = false
                     vm.toggleFavourite(pkg)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Rename") },
+                leadingIcon = { Icon(Icons.Rounded.Edit, null) },
+                onClick = {
+                    menu = false
+                    renaming = true
                 },
             )
             if (removable) {
@@ -204,6 +223,28 @@ internal fun FavouritesRow(state: UiState, vm: RemoteViewModel, open: (String) -
             }
         }
     }
+}
+
+/** A new name for an app tile; apps opened by voice are opened with this name ("Open <name>"). */
+@Composable
+private fun RenameDialog(current: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename app") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it.take(40) }, singleLine = true, label = { Text("Name") })
+                Text(
+                    "Use the name shown on the TV. Apps that aren't on the Play Store open by voice with this name.",
+                    fontSize = 12.sp,
+                    color = Palette.Muted,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** The app's official Play Store icon once fetched; until then a lettered tile, or a built-in icon for system apps. */

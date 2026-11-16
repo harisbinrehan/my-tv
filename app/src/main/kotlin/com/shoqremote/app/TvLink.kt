@@ -99,6 +99,7 @@ private const val VOICE_RATE = 8_000
 private const val VOICE_CHUNK = 16 * 1024
 private const val VOICE_MAX_MS = 10_000L
 
+
 val CHANNEL_CATEGORIES = listOf("News", "Sports", "Entertainment", "Movies", "Kids", "Islamic", "Infotainment", "Music", "Regional", "Other")
 
 /** Screens the box reports as apps that don't belong in the Apps grid; live TV has its own section. */
@@ -303,6 +304,12 @@ class TvLink(private val app: Application) {
     fun openApp(packageName: String) {
         if (packageName == SETTINGS_PACKAGE) return openTvSettings()
         val remote = client ?: return notify(NOT_CONNECTED)
+        // Apps installed from outside the Play Store can't be opened through it; the box's Assistant opens them by
+        // name. Generated speech proved unreliable (2026-11-16), so the owner says it.
+        if (storage.noPlayPage(packageName)) {
+            val name = nameOf(packageName)
+            return notify("$name isn't on the Play Store. Tap the mic and say \"Open $name\".")
+        }
         Trace.i("open app $packageName")
         runOpening(packageName) {
             if (!launch(remote, packageName)) notify("${nameOf(packageName)} didn't open. Check the TV.")
@@ -534,6 +541,14 @@ class TvLink(private val app: Application) {
                 _state.update { if (it.opening == target) it.copy(opening = null) else it }
             }
         }
+    }
+
+    /** A name the owner chose for an app tile; it's also the name the mic hint suggests saying. */
+    fun renameApp(packageName: String, name: String) {
+        val clean = name.trim().take(40)
+        if (clean.isEmpty()) return
+        storage.saveLabel(packageName, clean)
+        _state.update { it.copy(meta = it.meta + (packageName to AppMeta(clean, it.meta[packageName]?.iconPath))) }
     }
 
     /** Uses the app's web address when it has one; otherwise opens its Play Store page and presses its Open button. */

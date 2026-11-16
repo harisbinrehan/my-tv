@@ -13,6 +13,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.OutlinedButton
@@ -124,6 +126,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shoqremote.app.Widgets
 import com.shoqremote.app.fallbackLabel
 import com.shoqremote.app.Background
 import com.shoqremote.app.HOME_PACKAGE
@@ -428,8 +431,31 @@ private fun UpdateBanner(vm: RemoteViewModel) {
 @Composable
 private fun OverflowMenu(state: UiState, vm: RemoteViewModel) {
     var open by remember { mutableStateOf(false) }
+    var choosingWidget by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? Activity
+    if (choosingWidget) {
+        AlertDialog(
+            onDismissRequest = { choosingWidget = false },
+            title = { Text("Add a widget") },
+            text = {
+                Column {
+                    Widgets.choices.forEach { (name, provider) ->
+                        TextButton(
+                            onClick = {
+                                choosingWidget = false
+                                if (!Widgets.requestPin(context, provider)) {
+                                    vm.notify("Long-press your home screen, tap Widgets, then find My Tv.")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(name, modifier = Modifier.fillMaxWidth()) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { choosingWidget = false }) { Text("Cancel") } },
+        )
+    }
     Box {
         IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreVert, "More", tint = Palette.Muted) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -454,6 +480,14 @@ private fun OverflowMenu(state: UiState, vm: RemoteViewModel) {
                     } else {
                         Background.requestUnrestricted(context)
                     }
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Add a widget") },
+                leadingIcon = { Icon(Icons.Rounded.Widgets, null) },
+                onClick = {
+                    open = false
+                    choosingWidget = true
                 },
             )
             DropdownMenuItem(

@@ -61,6 +61,8 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeApp(packageName: String) = link.removeApp(packageName)
 
+    fun renameApp(packageName: String, name: String) = link.renameApp(packageName, name)
+
     fun saveChannel(channel: TvChannel, replacing: Int? = null) = link.saveChannel(channel, replacing)
 
     fun deleteChannel(number: Int) = link.deleteChannel(number)

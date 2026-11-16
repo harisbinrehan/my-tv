@@ -64,6 +64,42 @@
         </receiver>
 
         <receiver
+            android:name=".PowerWidget"
+            android:exported="false"
+            android:label="@string/widget_power">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_power_info" />
+        </receiver>
+
+        <receiver
+            android:name=".NowWidget"
+            android:exported="false"
+            android:label="@string/widget_now">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_now_info" />
+        </receiver>
+
+        <receiver
+            android:name=".RemoteWidget"
+            android:exported="false"
+            android:label="@string/widget_remote">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_remote_info" />
+        </receiver>
+
+        <receiver
             android:name=".UpdateReceiver"
             android:exported="false" />
     </application>
