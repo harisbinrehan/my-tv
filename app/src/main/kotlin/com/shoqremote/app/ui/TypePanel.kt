@@ -13,7 +13,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,7 +30,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -40,8 +38,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.ContentPaste
-import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.KeyboardHide
 import androidx.compose.material.icons.rounded.Mic
@@ -64,7 +60,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
@@ -97,7 +92,6 @@ private val LINE_BREAKS = Regex("[\\r\\n\\t]+")
 @Composable
 internal fun TypePanel(state: UiState, vm: RemoteViewModel, onClose: () -> Unit) {
     val view = LocalView.current
-    val clipboard = LocalClipboardManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     val onTv by vm.onTv.collectAsStateWithLifecycle()
@@ -133,18 +127,6 @@ internal fun TypePanel(state: UiState, vm: RemoteViewModel, onClose: () -> Unit)
             setText(if (current.isBlank()) spoken else "${current.trimEnd()} $spoken")
         }
         focus.requestFocus()
-    }
-    val paste: () -> Unit = {
-        val clip = clipboard.getText()?.text?.trim().orEmpty()
-        if (clip.isEmpty()) {
-            flash = "Nothing to paste: copy some text first"
-        } else {
-            val text = field.text
-            val start = field.selection.min.coerceIn(0, text.length)
-            val end = field.selection.max.coerceIn(0, text.length)
-            setText(text.substring(0, start) + clip + text.substring(end), start + clip.length)
-            flash = "Pasted ${clip.length} character${if (clip.length == 1) "" else "s"}"
-        }
     }
     val backspace by rememberUpdatedState { repeat: Boolean ->
         val text = field.text
@@ -250,7 +232,6 @@ internal fun TypePanel(state: UiState, vm: RemoteViewModel, onClose: () -> Unit)
                 youTube = youTube,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Pill(Icons.Rounded.ContentPaste, "Paste", onClick = paste)
                 var deleting by remember { mutableStateOf(false) }
                 Box(
                     Modifier
@@ -272,25 +253,6 @@ internal fun TypePanel(state: UiState, vm: RemoteViewModel, onClose: () -> Unit)
                 }
                 Spacer(Modifier.weight(1f))
                 PrimaryButton("Search", enabled = connected) { submit(field.text) }
-            }
-            val suggestions = state.recentTyped.filter {
-                field.text.isBlank() || (it.contains(field.text.trim(), ignoreCase = true) && !it.equals(field.text.trim(), ignoreCase = true))
-            }
-            if (suggestions.isNotEmpty()) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Rounded.History, "Recent", Modifier.size(18.dp), tint = Palette.Muted)
-                    suggestions.forEach { recent -> Chip(recent) { submit(recent) } }
-                    Text(
-                        "Clear",
-                        fontSize = 13.sp,
-                        color = Palette.Muted,
-                        modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = vm::clearRecent).padding(8.dp),
-                    )
-                }
             }
         }
     }
@@ -386,21 +348,4 @@ private fun PrimaryButton(label: String, enabled: Boolean, onClick: () -> Unit) 
         Spacer(Modifier.width(6.dp))
         Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (enabled) Color.White else Palette.Muted, maxLines = 1)
     }
-}
-
-@Composable
-private fun Chip(text: String, onClick: () -> Unit) {
-    Text(
-        text,
-        fontSize = 13.sp,
-        color = Palette.Text,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Palette.Raised)
-            .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    )
 }

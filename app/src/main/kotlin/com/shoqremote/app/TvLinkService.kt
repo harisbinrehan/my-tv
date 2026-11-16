@@ -8,7 +8,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
 import android.media.MediaMetadata
 import android.media.session.MediaSession
@@ -40,7 +39,6 @@ class TvLinkService : Service() {
     private data class Card(
         val title: String,
         val text: String,
-        val iconPath: String?,
         val mode: Mode,
         val muted: Boolean,
         val playing: Boolean,
@@ -113,20 +111,20 @@ class TvLinkService : Service() {
     private fun cardOf(state: UiState): Card {
         val muted = state.volume?.muted == true
         return when {
-            state.link == Link.NOT_PAIRED -> Card("My Tv", "Open My Tv to pair it with your Shoq box", null, Mode.NONE, muted, playing)
-            state.opening == POWER_TARGET -> Card("Turning on your TV...", "Waking the Shoq box", null, Mode.NONE, muted, playing)
-            state.link == Link.CONNECTING -> Card("My Tv", "Connecting to your TV...", null, Mode.NONE, muted, playing)
+            state.link == Link.NOT_PAIRED -> Card("My Tv", "Open My Tv to pair it with your Shoq box", Mode.NONE, muted, playing)
+            state.opening == POWER_TARGET -> Card("Turning on your TV...", "Waking the Shoq box", Mode.NONE, muted, playing)
+            state.link == Link.CONNECTING -> Card("My Tv", "Connecting to your TV...", Mode.NONE, muted, playing)
             // Unreachable usually means the box is in deep standby, so offer Turn on (it sends Wake-on-LAN first).
-            state.link == Link.OFFLINE && state.detail == NO_WIFI -> Card("My Tv", "Waiting for your home Wi-Fi", null, Mode.NONE, muted, playing)
-            state.link == Link.OFFLINE -> Card("Can't reach your TV", "Tap Turn on to wake it", null, Mode.POWER, muted, playing)
-            state.power == false -> Card("TV is off", "Tap Turn on to wake it", null, Mode.POWER, muted, playing)
+            state.link == Link.OFFLINE && state.detail == NO_WIFI -> Card("My Tv", "Waiting for your home Wi-Fi", Mode.NONE, muted, playing)
+            state.link == Link.OFFLINE -> Card("Can't reach your TV", "Tap Turn on to wake it", Mode.POWER, muted, playing)
+            state.power == false -> Card("TV is off", "Tap Turn on to wake it", Mode.POWER, muted, playing)
             else -> {
                 val app = state.currentApp
                 val title = when (app) {
                     null, HOME_PACKAGE -> "Home screen"
                     else -> state.meta[app]?.label ?: fallbackLabel(app)
                 }
-                Card(title, "On your TV", app?.let { state.meta[it]?.iconPath }, Mode.CONTROLS, muted, playing)
+                Card(title, "On your TV", Mode.CONTROLS, muted, playing)
             }
         }
     }
@@ -138,11 +136,10 @@ class TvLinkService : Service() {
     }
 
     private fun build(card: Card): Notification {
-        val art = card.iconPath?.let { BitmapFactory.decodeFile(it) }
+        // No artwork: the player card keeps its plain dark background instead of a blown-up app icon.
         val metadata = MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, card.title)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, card.text)
-        if (art != null) metadata.putBitmap(MediaMetadata.METADATA_KEY_ART, art)
         session.setMetadata(metadata.build())
         session.setPlaybackState(playbackState(card))
 
@@ -157,7 +154,6 @@ class TvLinkService : Service() {
             .setShowWhen(false)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setCategory(Notification.CATEGORY_TRANSPORT)
-        if (art != null) builder.setLargeIcon(art)
         when (card.mode) {
             Mode.CONTROLS -> {
                 builder.addAction(action(R.drawable.ic_n_rewind, "Rewind", Keys.MEDIA_REWIND))

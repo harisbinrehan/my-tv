@@ -188,8 +188,9 @@ fun RemoteApp(vm: RemoteViewModel) {
                     when {
                         !paired -> PairingPanel(state, vm)
                         section == Section.REMOTE -> RemotePage(state, vm, onVoice)
-                        section == Section.APPS -> AppsPage(state, vm)
-                        section == Section.TV -> TvPage(state, vm)
+                        // Opening an app or a channel brings you straight to the remote to control it.
+                        section == Section.APPS -> AppsPage(state, vm) { section = Section.REMOTE }
+                        section == Section.TV -> TvPage(state, vm) { section = Section.REMOTE }
                     }
                     if (state.listening) {
                         ListeningBanner(Modifier.align(Alignment.BottomCenter), onStop = vm::toggleVoiceSearch)
@@ -558,8 +559,7 @@ private fun ListeningBanner(modifier: Modifier, onStop: () -> Unit) {
 }
 
 /**
- * Built for one thumb and grouped by job: what's on the TV at the top (when there's room), then sound and
- * channels, the arrows, Back / Voice / Home, and the media keys lowest, beside the floating Type button. Sized from
+ * Built for one thumb and grouped by job: what's on the TV at the top (when there's room), then sound, the arrows, Back / Voice / Home, and the media keys lowest, beside the floating Type button. Sized from
  * the space available, so it never scrolls.
  */
 @Composable
@@ -571,21 +571,19 @@ private fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit)
         val gap = if (compact) 12.dp else 16.dp
         val row = if (compact) 50.dp else 56.dp
         val navKey = if (compact) 56.dp else 64.dp
-        val fixed = row * 2 + navKey + gap * 3
-        // The card only shows when the arrows still get 250 dp.
-        val showNow = maxHeight - fixed - NOW_CARD - gap >= 250.dp
-        val dpad = (maxHeight - fixed - if (showNow) NOW_CARD + gap else 0.dp)
-            .coerceIn(170.dp, 300.dp)
+        // Everything below the spare space except the arrows: two rows, Back / Voice / Home, and the three gaps.
+        val controls = row * 2 + navKey + gap * 3
+        val nowSpace = NOW_CARD + gap
+        // The card only shows when the arrows still get 250 dp; the arrows take whatever height is left, never more.
+        val showNow = maxHeight - controls - nowSpace >= 250.dp
+        val dpad = (maxHeight - controls - if (showNow) nowSpace else 0.dp)
+            .coerceAtMost(300.dp)
             .coerceAtMost(maxWidth - 24.dp)
-        Column(
-            Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(gap, Alignment.Bottom),
-        ) {
-            if (showNow) {
-                NowOnTv(state)
-                Spacer(Modifier.weight(1f))
-            }
+            .coerceAtLeast(150.dp)
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (showNow) NowOnTv(state)
+            // Spare height stays above the controls, so they sit within the thumb's reach.
+            Spacer(Modifier.weight(1f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoundToggle(
                     if (muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
@@ -594,16 +592,18 @@ private fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit)
                     size = row,
                 ) { vm.key(Keys.VOLUME_MUTE) }
                 Rocker(onKey, Keys.VOLUME_DOWN, Keys.VOLUME_UP, "VOL", Icons.Rounded.Remove, Icons.Rounded.Add, Modifier.weight(1f).height(row), repeat = true)
-                Rocker(onKey, Keys.CHANNEL_DOWN, Keys.CHANNEL_UP, "CH", Icons.Rounded.KeyboardArrowDown, Icons.Rounded.KeyboardArrowUp, Modifier.weight(1f).height(row))
             }
+            Spacer(Modifier.height(gap))
             DPad(onKey, dpad)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.height(gap))
+            Row(Modifier.fillMaxWidth().height(navKey), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 RoundKey(onKey, Keys.BACK, Icons.AutoMirrored.Rounded.ArrowBack, "Back", navKey)
                 RoundToggle(Icons.Rounded.Mic, if (state.listening) "Stop voice search" else "Voice search", selected = state.listening, size = navKey, onClick = onVoice)
                 RoundKey(onKey, Keys.HOME, Icons.Rounded.Home, "Home", navKey)
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                MediaBar(onKey, Modifier.weight(1f).height(row))
+            Spacer(Modifier.height(gap))
+            Row(Modifier.fillMaxWidth().height(row), verticalAlignment = Alignment.CenterVertically) {
+                MediaBar(onKey, Modifier.weight(1f).fillMaxHeight())
                 // The floating Type button sits here, in line with the media keys.
                 Spacer(Modifier.width(72.dp))
             }

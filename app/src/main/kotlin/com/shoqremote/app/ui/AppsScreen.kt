@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Shop
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LiveTv
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.shoqremote.app.Link
 import com.shoqremote.app.HOME_PACKAGE
 import com.shoqremote.app.LIVE_TV_PACKAGE
 import com.shoqremote.app.RemoteViewModel
@@ -63,11 +65,16 @@ import com.shoqremote.app.UiState
 import com.shoqremote.app.fallbackLabel
 
 @Composable
-internal fun AppsPage(state: UiState, vm: RemoteViewModel) {
+internal fun AppsPage(state: UiState, vm: RemoteViewModel, onOpened: () -> Unit) {
+    val open: (String) -> Unit = { pkg ->
+        val connected = state.link == Link.CONNECTED
+        vm.openApp(pkg)
+        if (connected) onOpened()
+    }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 100.dp),
         modifier = Modifier.fillMaxSize(),
-        // The bottom gap keeps the floating remote button clear of the last row.
+        // The bottom gap keeps the floating Type button clear of the last row.
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -79,7 +86,7 @@ internal fun AppsPage(state: UiState, vm: RemoteViewModel) {
                 if (state.favourites.isEmpty()) {
                     Text("Hold any app below and choose Add to favourites to keep it here.", fontSize = 13.sp, color = Palette.Muted)
                 } else {
-                    FavouritesRow(state, vm)
+                    FavouritesRow(state, vm, open)
                 }
                 Spacer(Modifier.height(18.dp))
                 Text("All apps", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
@@ -87,8 +94,7 @@ internal fun AppsPage(state: UiState, vm: RemoteViewModel) {
                 Text("Tap an app to open it on the TV. Hold it for more options.", fontSize = 13.sp, color = Palette.Muted)
             }
         }
-        items(state.apps, key = { it }) { pkg -> AppTile(pkg, state, vm, removable = true) }
-        item(key = SETTINGS_PACKAGE) { AppTile(SETTINGS_PACKAGE, state, vm, removable = false) }
+        items(state.apps, key = { it }) { pkg -> AppTile(pkg, state, vm, open, removable = true) }
         item(span = { GridItemSpan(maxLineSpan) }) {
             Text(
                 "The box doesn't share its app list, so an app joins here the first time it is on the TV. With notification controls on, that includes apps you open with the physical remote.",
@@ -103,7 +109,7 @@ internal fun AppsPage(state: UiState, vm: RemoteViewModel) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, removable: Boolean) {
+private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, open: (String) -> Unit, removable: Boolean) {
     val view = LocalView.current
     val favourite = pkg in state.favourites
     var menu by remember { mutableStateOf(false) }
@@ -120,7 +126,7 @@ private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, removable:
                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                         menu = true
                     },
-                    onClick = { vm.openApp(pkg) },
+                    onClick = { open(pkg) },
                 )
                 .padding(top = 16.dp, bottom = 12.dp, start = 8.dp, end = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -164,7 +170,7 @@ private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, removable:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun FavouritesRow(state: UiState, vm: RemoteViewModel) {
+internal fun FavouritesRow(state: UiState, vm: RemoteViewModel, open: (String) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(state.favourites, key = { it }) { pkg ->
             var menu by remember { mutableStateOf(false) }
@@ -176,7 +182,7 @@ internal fun FavouritesRow(state: UiState, vm: RemoteViewModel) {
                         .combinedClickable(
                             onClickLabel = "Open on the TV",
                             onLongClick = { menu = true },
-                            onClick = { vm.openApp(pkg) },
+                            onClick = { open(pkg) },
                         )
                         .padding(vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -200,7 +206,7 @@ internal fun FavouritesRow(state: UiState, vm: RemoteViewModel) {
     }
 }
 
-/** The app's official Play Store icon once fetched; until then a lettered tile, or a gear for Settings. */
+/** The app's official Play Store icon once fetched; until then a lettered tile, or a built-in icon for system apps. */
 @Composable
 internal fun AppIcon(pkg: String, state: UiState, size: Dp) {
     val path = state.meta[pkg]?.iconPath
@@ -243,6 +249,8 @@ internal fun appName(pkg: String, state: UiState): String = state.meta[pkg]?.lab
 /** Built-in screens with no Play Store icon of their own. */
 private val SYSTEM_ICONS = mapOf(
     SETTINGS_PACKAGE to Icons.Rounded.Settings,
+    // Google's site has no icon for the store itself, so it gets a built-in one.
+    "com.android.vending" to Icons.Rounded.Shop,
     LIVE_TV_PACKAGE to Icons.Rounded.LiveTv,
     HOME_PACKAGE to Icons.Rounded.Home,
 )

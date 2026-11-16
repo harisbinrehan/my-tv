@@ -37,10 +37,6 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     val imeRequests: Flow<Unit> = link.imeRequests
     val typedText: String get() = link.typedText
 
-    fun forgetRecent(text: String) = link.forgetRecent(text)
-
-    fun clearRecent() = link.clearRecent()
-
     fun typeLive(value: String) = link.typeLive(value)
 
     fun clearTyped() = link.clearTyped()

@@ -77,7 +77,6 @@ data class UiState(
     val opening: String? = null,
     val listening: Boolean = false,
     val notificationControls: Boolean = true,
-    val recentTyped: List<String> = emptyList(),
     val pairing: PairingStep = PairingStep.IDLE,
     val pairingMessage: String? = null,
 )
@@ -95,7 +94,6 @@ private const val NOT_FOUND = "Can't find the Shoq box. Is it on, and is this ph
 private const val NOT_CONNECTED = "Not connected to the box yet."
 internal const val NO_WIFI ="This phone isn't on Wi-Fi. Join your home Wi-Fi to reach the TV."
 private const val MAX_BACKOFF_MS = 30_000L
-private const val MAX_RECENT = 8
 private const val WIFI_RECHECK_MS = 60_000L
 private const val VOICE_RATE = 8_000
 private const val VOICE_CHUNK = 16 * 1024
@@ -106,7 +104,7 @@ val CHANNEL_CATEGORIES = listOf("News", "Sports", "Entertainment", "Movies", "Ki
 /** Screens the box reports as apps that don't belong in the Apps grid; live TV has its own section. */
 private val NOT_APPS = setOf(
     HOME_PACKAGE, LIVE_TV_PACKAGE, "com.google.android.tvlauncher", "com.google.android.apps.tv.launcherx",
-    SETTINGS_PACKAGE, PLAY_STORE, ASSISTANT, "com.android.systemui", "com.google.android.tungsten.setupwraith", "android",
+    SETTINGS_PACKAGE, ASSISTANT, "com.android.systemui", "com.google.android.tungsten.setupwraith", "android",
 )
 
 /** Web addresses these apps claim; this box ignores market:// and intent: links, so other apps open via Play Store. */
@@ -116,6 +114,8 @@ private val DIRECT_LINKS = mapOf(
     "com.netflix.ninja" to "https://www.netflix.com/title",
     "com.amazon.amazonvideo.livingroom" to "https://app.primevideo.com",
     "com.disney.disneyplus" to "https://www.disneyplus.com",
+    // The store claims its own web addresses; this opens its home rather than its own listing page.
+    PLAY_STORE to "https://play.google.com/store/apps",
 )
 
 /**
@@ -255,7 +255,6 @@ class TvLink(private val app: Application) {
         if (client == null) return notify(NOT_CONNECTED)
         val sent = desiredText
         Trace.i("typing: Enter after ${sent.length} characters")
-        rememberTyped(sent)
         withClient {
             mirror?.update(sent)
             it.sendKey(Keys.ENTER)
@@ -277,7 +276,6 @@ class TvLink(private val app: Application) {
     fun searchYouTube(query: String) {
         if (client == null) return notify(NOT_CONNECTED)
         Trace.i("YouTube search (${query.trim().length} characters)")
-        rememberTyped(query)
         withClient {
             it.launchLink(YOUTUBE_SEARCH + URLEncoder.encode(query.trim(), "UTF-8"))
             finishTyping(query)
@@ -287,17 +285,6 @@ class TvLink(private val app: Application) {
     private fun finishTyping(sent: String) {
         forgetMirror()
         if (desiredText == sent) desiredText = ""
-    }
-
-    fun forgetRecent(text: String) = synchronized(listLock) {
-        val updated = storage.recentTyped - text
-        storage.recentTyped = updated
-        _state.update { it.copy(recentTyped = updated) }
-    }
-
-    fun clearRecent() = synchronized(listLock) {
-        storage.recentTyped = emptyList()
-        _state.update { it.copy(recentTyped = emptyList()) }
     }
 
     private fun syncTyped() = withClient {
@@ -311,19 +298,6 @@ class TvLink(private val app: Application) {
     private fun forgetMirror() {
         mirror?.forget()
         _onTv.value = ""
-    }
-
-    /** Keeps searches for one-tap reuse, but never anything that looks like an address, email, code or password. */
-    private fun rememberTyped(text: String) {
-        val query = text.trim()
-        val private = query.length > 60 || '@' in query || "://" in query || query.startsWith("www.") ||
-            (' ' !in query && query.length >= 6 && query.any(Char::isDigit) && query.any(Char::isLetter))
-        if (query.length < 2 || private) return
-        synchronized(listLock) {
-            val updated = (listOf(query) + storage.recentTyped.filterNot { it.equals(query, ignoreCase = true) }).take(MAX_RECENT)
-            storage.recentTyped = updated
-            _state.update { it.copy(recentTyped = updated) }
-        }
     }
 
     fun openApp(packageName: String) {
@@ -526,7 +500,6 @@ class TvLink(private val app: Application) {
             channels = storage.channels,
             pinnedChannels = storage.pinnedChannels,
             notificationControls = storage.notificationControls,
-            recentTyped = storage.recentTyped,
         )
     }
 

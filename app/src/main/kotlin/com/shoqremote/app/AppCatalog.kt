@@ -12,6 +12,7 @@ private val KNOWN_LABELS = mapOf(
     "com.release.aryzaptv" to "ARY Plus",
     "com.android.tv.settings" to "Settings",
     "com.android.vending" to "Play Store",
+    "com.netflix.ninja" to "Netflix",
     "com.launcher.ptcl" to "Home",
     "com.zte.CTBrowser" to "Live TV",
     "com.google.android.katniss" to "Google Assistant",

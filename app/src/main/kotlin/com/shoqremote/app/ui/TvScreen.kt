@@ -46,6 +46,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.shoqremote.app.Link
 import com.shoqremote.app.CHANNEL_CATEGORIES
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.produceState
@@ -74,7 +76,14 @@ private const val ALL = "All"
 
 /** Live TV channels with their logos: dial a number, search, filter by category, and star favourites to keep them on top. */
 @Composable
-internal fun TvPage(state: UiState, vm: RemoteViewModel) {
+internal fun TvPage(state: UiState, vm: RemoteViewModel, onWatching: () -> Unit) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val watch: (Int) -> Unit = { number ->
+        val connected = state.link == Link.CONNECTED
+        keyboard?.hide()
+        vm.watchChannel(number)
+        if (connected) onWatching()
+    }
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf(ALL) }
     var adding by remember { mutableStateOf(false) }
@@ -90,7 +99,7 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
     }
     LazyColumn(
         Modifier.fillMaxSize().imePadding(),
-        // The bottom gap keeps the floating remote button clear of the last row's star.
+        // The bottom gap keeps the floating Type button clear of the last row's star.
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -106,11 +115,11 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
                     if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Clear, "Clear search") }
                 },
                 keyboardOptions = KeyboardOptions(imeAction = if (dial != null) ImeAction.Go else ImeAction.Search),
-                keyboardActions = KeyboardActions(onGo = { dial?.let(vm::watchChannel) }),
+                keyboardActions = KeyboardActions(onGo = { dial?.let(watch) }),
             )
         }
         if (dial != null) {
-            item(key = "dial") { DialRow(dial, state, vm) }
+            item(key = "dial") { DialRow(dial, state, watch) }
         }
         if (categories.size > 1) {
             item {
@@ -122,7 +131,7 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
         if (pinned.isNotEmpty() && needle.isEmpty() && category == ALL) {
             item { SectionLabel("Favourites") }
             itemsIndexed(pinned, key = { _, channel -> "pinned-${channel.number}" }) { index, channel ->
-                ChannelRow(channel, state, vm, pinned = true, order = index to pinned.size, onEdit = { editing = channel })
+                ChannelRow(channel, state, vm, watch, pinned = true, order = index to pinned.size, onEdit = { editing = channel })
             }
         }
         item {
@@ -141,7 +150,7 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
             item { Text("No channels match.", color = Palette.Muted) }
         }
         items(shown, key = { "channel-${it.number}" }) { channel ->
-            ChannelRow(channel, state, vm, pinned = channel.number in state.pinnedChannels, order = null, onEdit = { editing = channel })
+            ChannelRow(channel, state, vm, watch, pinned = channel.number in state.pinnedChannels, order = null, onEdit = { editing = channel })
         }
     }
     if (adding || editing != null) {
@@ -169,14 +178,14 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel) {
 
 /** "Watch channel 123" for a typed number, so any channel works even before it's in the list. */
 @Composable
-private fun DialRow(number: Int, state: UiState, vm: RemoteViewModel) {
+private fun DialRow(number: Int, state: UiState, watch: (Int) -> Unit) {
     val busy = state.opening == "$CHANNEL_PREFIX$number"
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Palette.Raised)
-            .clickable(onClickLabel = "Watch channel $number") { vm.watchChannel(number) }
+            .clickable(onClickLabel = "Watch channel $number") { watch(number) }
             .padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -186,7 +195,7 @@ private fun DialRow(number: Int, state: UiState, vm: RemoteViewModel) {
         if (busy) {
             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Palette.Indigo)
         } else {
-            Button(onClick = { vm.watchChannel(number) }) { Text("Go") }
+            Button(onClick = { watch(number) }) { Text("Go") }
         }
     }
 }
@@ -197,6 +206,7 @@ private fun ChannelRow(
     channel: TvChannel,
     state: UiState,
     vm: RemoteViewModel,
+    watch: (Int) -> Unit,
     pinned: Boolean,
     order: Pair<Int, Int>?,
     onEdit: () -> Unit,
@@ -211,7 +221,7 @@ private fun ChannelRow(
                 onClickLabel = "Watch",
                 onLongClickLabel = "Edit channel",
                 onLongClick = onEdit,
-                onClick = { vm.watchChannel(channel.number) },
+                onClick = { watch(channel.number) },
             )
             .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -33,7 +33,20 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 14: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 15: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 15 (owner's requests, 2026-11-16)
+
+- Remote: CH up/down removed; the sound row is Mute plus a wide VOL. Rows are laid out with explicit gaps and the
+  arrows take only the height left (v14 under-counted one gap and squeezed Back/Voice/Home onto the media bar on
+  the owner's S23 Ultra). Checked at 1080x2316, 450 dpi, font scale 1.15.
+- Opening an app (Apps) or a channel (TV) while connected switches to the remote.
+- Typing panel: no Paste and no recent-search chips; recent searches are no longer stored, and the saved list is
+  cleared on first start (`Storage.upgradeFromBefore15`).
+- Notification player card: no app artwork. Apps: Netflix and Play Store added (once, to existing lists), Settings
+  tile removed (TV settings is in the menu). Play Store opens via https://play.google.com/store/apps.
+- NetMirror is installed on the box but is not on the Play Store, so the only launch route the box allows (the Play
+  Store page) can't open it. Not added.
 
 ### Version 14 (owner's layout requests, 2026-11-16)
 

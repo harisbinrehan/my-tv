@@ -12,6 +12,10 @@ class Storage(context: Context) {
     private val dir = context.filesDir
     private val prefs = context.getSharedPreferences("shoq-remote", Context.MODE_PRIVATE)
 
+    init {
+        upgradeFromBefore15()
+    }
+
     fun identity(deviceName: String): ClientIdentity {
         val key = File(dir, "client.key")
         val cert = File(dir, "client.crt")
@@ -49,11 +53,6 @@ class Storage(context: Context) {
         get() = prefs.getBoolean("notification_controls", true)
         set(value) = prefs.edit().putBoolean("notification_controls", value).apply()
 
-    /** Recent searches typed on the TV, newest first; TvLink keeps anything private-looking out. */
-    var recentTyped: List<String>
-        get() = list("recent_typed").orEmpty()
-        set(value) = putList("recent_typed", value)
-
     var askedBackground: Boolean
         get() = prefs.getBoolean("asked_background", false)
         set(value) = prefs.edit().putBoolean("asked_background", value).apply()
@@ -90,6 +89,18 @@ class Storage(context: Context) {
 
     fun iconFile(packageName: String): File = File(File(dir, "icons").apply { mkdirs() }, packageName)
 
+    /**
+     * Version 15 stopped keeping recent searches (this clears the ones saved before) and lists Netflix and the
+     * Play Store from the start (added once to lists made before, so removing them later sticks).
+     */
+    private fun upgradeFromBefore15() {
+        if (prefs.contains("recent_typed")) prefs.edit().remove("recent_typed").apply()
+        if (!prefs.getBoolean("added_v15_apps", false)) {
+            apps = (apps + ADDED_IN_15).distinct()
+            prefs.edit().putBoolean("added_v15_apps", true).apply()
+        }
+    }
+
     /** The first version kept pinned apps under "apps"; they become favourites. */
     private fun legacyPinned(): List<String> = list("apps").orEmpty()
 
@@ -98,6 +109,7 @@ class Storage(context: Context) {
     private fun putList(key: String, value: List<String>) = prefs.edit().putString(key, value.joinToString("\n")).apply()
 
     private companion object {
-        val SEED_APPS = listOf("com.release.aryzaptv", "com.google.android.youtube.tv")
+        val ADDED_IN_15 = listOf("com.netflix.ninja", "com.android.vending")
+        val SEED_APPS = listOf("com.release.aryzaptv", "com.google.android.youtube.tv") + ADDED_IN_15
     }
 }
