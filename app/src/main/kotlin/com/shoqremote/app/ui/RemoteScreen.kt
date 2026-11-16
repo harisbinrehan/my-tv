@@ -7,6 +7,11 @@ import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -197,8 +202,13 @@ private fun TopArea(state: UiState, vm: RemoteViewModel, onRemote: Boolean, open
             StatusLine(state)
         }
         if (paired) {
-            RemoteButton(onRemote, openRemote)
-            Spacer(Modifier.width(10.dp))
+            // Only where it leads somewhere: on the remote itself it would do nothing.
+            AnimatedVisibility(!onRemote, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+                Row {
+                    RemoteButton(openRemote)
+                    Spacer(Modifier.width(10.dp))
+                }
+            }
             PowerButton(state, vm::power)
         }
         OverflowMenu(state, vm)
@@ -231,15 +241,15 @@ private fun PowerButton(state: UiState, onClick: () -> Unit) {
     }
 }
 
-/** The remote lives in the header so every section is one tap from it; tinted while it's the page on screen. */
+/** Back to the remote from Apps or TV; hidden on the remote page itself. */
 @Composable
-private fun RemoteButton(selected: Boolean, onClick: () -> Unit) {
+private fun RemoteButton(onClick: () -> Unit) {
     val view = LocalView.current
     Box(
         Modifier
             .size(44.dp)
             .clip(CircleShape)
-            .background(if (selected) Palette.Indigo.copy(alpha = 0.30f) else Palette.Raised)
+            .background(Palette.Raised)
             .clickable(onClickLabel = "Remote", role = Role.Button) {
                 view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 onClick()
