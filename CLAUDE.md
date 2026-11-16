@@ -44,6 +44,8 @@ Requests made over the build, all implemented in version 3 unless noted:
   request; TV settings moved to the ⋮ menu (shown while connected). Type lives only in the bottom bar.
 - Updates show as a slim strip (Update, ×), which opens a sheet with the notes and Later or Update now; while
   updating the strip shows progress. Cancelling Android's prompt brings the strip back.
+- The TV notification's player card has Power (Turn TV off, via `link.power()`) where Back was; with the TV off
+  it shows Turn on as before.
 
 ### Version 11 (owner's layout requests, 2026-11-16)
 

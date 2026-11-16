@@ -54,8 +54,8 @@ class TvLinkService : Service() {
         override fun onCustomAction(action: String, extras: Bundle?) {
             when (action) {
                 CUSTOM_MUTE -> press(Keys.VOLUME_MUTE)
-                CUSTOM_BACK -> press(Keys.BACK)
-                CUSTOM_POWER -> link.turnOn()
+                // Off while the box says it's on, otherwise the full turn-on (never a blind POWER toggle).
+                CUSTOM_POWER -> link.power()
             }
         }
     }
@@ -91,6 +91,7 @@ class TvLinkService : Service() {
         when (intent?.action) {
             ACTION_KEY -> press(intent.getIntExtra(EXTRA_KEY, 0))
             ACTION_TURN_ON -> link.turnOn()
+            ACTION_POWER -> link.power()
         }
         return START_STICKY
     }
@@ -163,13 +164,11 @@ class TvLinkService : Service() {
                 builder.addAction(action(if (card.playing) R.drawable.ic_n_pause else R.drawable.ic_n_play, "Play or pause", Keys.MEDIA_PLAY_PAUSE))
                 builder.addAction(action(R.drawable.ic_n_ff, "Fast forward", Keys.MEDIA_FAST_FORWARD))
                 builder.addAction(action(if (card.muted) R.drawable.ic_n_unmute else R.drawable.ic_n_mute, if (card.muted) "Unmute" else "Mute", Keys.VOLUME_MUTE))
-                builder.addAction(action(R.drawable.ic_n_back, "Back", Keys.BACK))
+                builder.addAction(powerAction("Turn TV off", ACTION_POWER, POWER_REQUEST))
                 style.setShowActionsInCompactView(0, 1, 2)
             }
             Mode.POWER -> {
-                val turnOn = Intent(this, TvLinkService::class.java).setAction(ACTION_TURN_ON)
-                val pending = PendingIntent.getService(this, TURN_ON_REQUEST, turnOn, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-                builder.addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.ic_n_power), "Turn on", pending).build())
+                builder.addAction(powerAction("Turn on", ACTION_TURN_ON, TURN_ON_REQUEST))
                 style.setShowActionsInCompactView(0)
             }
             Mode.NONE -> Unit
@@ -198,7 +197,7 @@ class TvLinkService : Service() {
                         if (card.muted) R.drawable.ic_n_unmute else R.drawable.ic_n_mute,
                     ).build(),
                 )
-                state.addCustomAction(PlaybackState.CustomAction.Builder(CUSTOM_BACK, "Back", R.drawable.ic_n_back).build())
+                state.addCustomAction(PlaybackState.CustomAction.Builder(CUSTOM_POWER, "Turn TV off", R.drawable.ic_n_power).build())
             }
             Mode.POWER -> {
                 state.setState(PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0f)
@@ -207,6 +206,12 @@ class TvLinkService : Service() {
             Mode.NONE -> state.setState(PlaybackState.STATE_NONE, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0f)
         }
         return state.build()
+    }
+
+    private fun powerAction(title: String, action: String, request: Int): Notification.Action {
+        val intent = Intent(this, TvLinkService::class.java).setAction(action)
+        val pending = PendingIntent.getService(this, request, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        return Notification.Action.Builder(Icon.createWithResource(this, R.drawable.ic_n_power), title, pending).build()
     }
 
     private fun action(icon: Int, title: String, key: Int): Notification.Action {
@@ -239,10 +244,11 @@ class TvLinkService : Service() {
         private const val HOLDER = "notification"
         private const val ACTION_KEY = "com.shoqremote.app.KEY"
         private const val ACTION_TURN_ON = "com.shoqremote.app.TURN_ON"
+        private const val ACTION_POWER = "com.shoqremote.app.POWER"
         private const val TURN_ON_REQUEST = 10_000
+        private const val POWER_REQUEST = 10_001
         private const val EXTRA_KEY = "key"
         private const val CUSTOM_MUTE = "mute"
-        private const val CUSTOM_BACK = "back"
         private const val CUSTOM_POWER = "power"
 
         fun start(context: Context) {
