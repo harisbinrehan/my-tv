@@ -42,7 +42,8 @@ class Storage(context: Context) {
 
     /** Apps the box has shown on screen, in the order they first appeared. */
     var apps: List<String>
-        get() = list("known_apps") ?: (legacyPinned() + SEED_APPS).distinct()
+        // The screensaver was listed by mistake before version 18; it is never an app.
+        get() = (list("known_apps") ?: (legacyPinned() + SEED_APPS).distinct()) - SCREENSAVER
         set(value) = putList("known_apps", value)
 
     var favourites: List<String>
@@ -89,6 +90,12 @@ class Storage(context: Context) {
     fun noPlayPage(packageName: String): Boolean = prefs.getBoolean("noplay:$packageName", false)
 
     fun markNoPlayPage(packageName: String) = prefs.edit().putBoolean("noplay:$packageName", true).apply()
+
+    /** A code to type when this app asks for one (for example an OTP that stays the same). */
+    fun appCode(packageName: String): String? = prefs.getString("code:$packageName", null)
+
+    fun setAppCode(packageName: String, code: String?) =
+        prefs.edit().apply { if (code == null) remove("code:$packageName") else putString("code:$packageName", code) }.apply()
 
     fun saveLabel(packageName: String, label: String) = prefs.edit().putString("label:$packageName", label).apply()
 

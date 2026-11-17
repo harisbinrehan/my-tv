@@ -33,7 +33,19 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 17: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 18: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 18 (2026-11-17)
+
+- The box does not report NetMirror at all: with NetMirror open it reported the PTCL home screen (and earlier the
+  previous app, Netflix). So apps can be added **by name** (`voice:<name>` entries, Apps > Add app by name). Their
+  tile switches to the remote and starts the mic with "Say "Open <name>"" (the owner's voice opens NetMirror).
+  Apps with no Play Store page open the same way.
+- Per-app code (tile menu > Code to enter; also when adding by name). After opening by name, a banner offers
+  "Enter <code>" for a minute (types it, then Enter). If the box sends its keyboard request (onImeShow) in that
+  minute, the code is typed automatically; this box has not been seen sending it, so the banner is the reliable
+  path. Enter is never pressed without a request: on a non-code screen it could start a video.
+- The screensaver (`com.google.android.backdrop`) is never listed as an app.
 
 ### Version 17 (2026-11-17, owner's reference design)
 

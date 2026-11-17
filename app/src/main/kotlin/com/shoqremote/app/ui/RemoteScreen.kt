@@ -140,6 +140,16 @@ fun RemoteApp(vm: RemoteViewModel) {
         val allowed = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         if (state.listening || allowed) vm.toggleVoiceSearch() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
+    // What the listening banner suggests saying when the mic opens an app by name.
+    var voiceHint by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.listening) { if (!state.listening) voiceHint = null }
+    val openByVoice: (String) -> Unit = { pkg ->
+        vm.prepareVoiceOpen(pkg)
+        voiceHint = "Say \"Open ${vm.appName(pkg)}\""
+        section = Section.REMOTE
+        if (!state.listening) onVoice()
+    }
+    val codePrompt by vm.codePrompt.collectAsStateWithLifecycle()
     var typing by rememberSaveable { mutableStateOf(false) }
     val onType: () -> Unit = { typing = true }
     LaunchedEffect(vm) { vm.imeRequests.collect { typing = true } }
@@ -168,11 +178,15 @@ fun RemoteApp(vm: RemoteViewModel) {
                         !paired -> PairingPanel(state, vm)
                         section == Section.REMOTE -> RemotePage(state, vm, onVoice, onType) { section = Section.APPS }
                         // Opening an app or a channel brings you straight to the remote to control it.
-                        section == Section.APPS -> AppsPage(state, vm) { section = Section.REMOTE }
+                        section == Section.APPS -> AppsPage(state, vm, openByVoice) { section = Section.REMOTE }
                         section == Section.TV -> TvPage(state, vm) { section = Section.REMOTE }
                     }
                     if (state.listening) {
-                        ListeningBanner(Modifier.align(Alignment.BottomCenter), onStop = vm::toggleVoiceSearch)
+                        ListeningBanner(Modifier.align(Alignment.BottomCenter), voiceHint, onStop = vm::toggleVoiceSearch)
+                    } else {
+                        codePrompt?.let { prompt ->
+                            CodeBanner(Modifier.align(Alignment.BottomCenter), prompt.name, prompt.code, onEnter = vm::enterCode, onDismiss = vm::dismissCode)
+                        }
                     }
                 }
             }
@@ -548,7 +562,7 @@ private fun RowScope.NavItem(
 )
 
 @Composable
-private fun ListeningBanner(modifier: Modifier, onStop: () -> Unit) {
+private fun ListeningBanner(modifier: Modifier, hint: String?, onStop: () -> Unit) {
     Row(
         modifier
             .padding(16.dp)
@@ -561,10 +575,42 @@ private fun ListeningBanner(modifier: Modifier, onStop: () -> Unit) {
         Icon(Icons.Rounded.Mic, null, tint = Color.White)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("Listening", color = Color.White, fontWeight = FontWeight.SemiBold)
-            Text("Speak to your TV, for example \"Open YouTube\"", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+            Text(hint ?: "Listening", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (hint != null) "Listening: speak now" else "Speak to your TV, for example \"Open YouTube\"",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 12.sp,
+            )
         }
         TextButton(onClick = onStop) { Text("Stop", color = Color.White) }
+    }
+}
+
+/**
+ * After opening an app by name that has a code (NetMirror's OTP): one tap types it and presses Enter. My Tv can't see
+ * the app's screens, so it only types on request, or when the box says a text box got focus.
+ */
+@Composable
+private fun CodeBanner(modifier: Modifier, name: String, code: String, onEnter: () -> Unit, onDismiss: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    Row(
+        modifier
+            .padding(16.dp)
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Palette.Sheet)
+            .border(1.dp, Palette.Indigo.copy(alpha = 0.5f), shape)
+            .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("$name asking for a code?", color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text("Tap to type it on the TV", color = Palette.Muted, fontSize = 12.sp)
+        }
+        Button(onClick = onEnter, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp), modifier = Modifier.height(38.dp)) {
+            Text("Enter $code", fontSize = 13.sp)
+        }
+        IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, "Not now", tint = Palette.Muted) }
     }
 }
 

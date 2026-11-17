@@ -9,6 +9,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Shop
@@ -69,11 +72,23 @@ import com.shoqremote.app.UiState
 import com.shoqremote.app.fallbackLabel
 
 @Composable
-internal fun AppsPage(state: UiState, vm: RemoteViewModel, onOpened: () -> Unit) {
+internal fun AppsPage(state: UiState, vm: RemoteViewModel, openByVoice: (String) -> Unit, onOpened: () -> Unit) {
+    var adding by remember { mutableStateOf(false) }
+    // Apps the box can't open by link (added by name, or not on the Play Store) open by saying their name.
     val open: (String) -> Unit = { pkg ->
         val connected = state.link == Link.CONNECTED
-        vm.openApp(pkg)
-        if (connected) onOpened()
+        if (vm.opensByVoice(pkg)) {
+            if (connected) openByVoice(pkg) else vm.notify("Not connected to the TV.")
+        } else {
+            vm.openApp(pkg)
+            if (connected) onOpened()
+        }
+    }
+    if (adding) {
+        AddByNameDialog(onDismiss = { adding = false }) { name, code ->
+            vm.addVoiceApp(name, code)
+            adding = false
+        }
     }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 100.dp),
@@ -93,7 +108,14 @@ internal fun AppsPage(state: UiState, vm: RemoteViewModel, onOpened: () -> Unit)
                     FavouritesRow(state, vm, open)
                 }
                 Spacer(Modifier.height(18.dp))
-                Text("All apps", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("All apps", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { adding = true }) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Add app by name")
+                    }
+                }
                 Spacer(Modifier.height(2.dp))
                 Text("Tap an app to open it on the TV. Hold it for more options.", fontSize = 13.sp, color = Palette.Muted)
             }
@@ -118,6 +140,13 @@ private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, open: (Str
     val favourite = pkg in state.favourites
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
+    var coding by remember { mutableStateOf(false) }
+    if (coding) {
+        CodeDialog(vm.appName(pkg), vm.appCode(pkg).orEmpty(), onDismiss = { coding = false }) { code ->
+            vm.setAppCode(pkg, code)
+            coding = false
+        }
+    }
     if (renaming) {
         RenameDialog(state.meta[pkg]?.label ?: fallbackLabel(pkg), onDismiss = { renaming = false }) { name ->
             vm.renameApp(pkg, name)
@@ -163,6 +192,14 @@ private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, open: (Str
                 onClick = {
                     menu = false
                     vm.toggleFavourite(pkg)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(if (vm.appCode(pkg) == null) "Code to enter" else "Change code") },
+                leadingIcon = { Icon(Icons.Rounded.Password, null) },
+                onClick = {
+                    menu = false
+                    coding = true
                 },
             )
             DropdownMenuItem(
@@ -223,6 +260,48 @@ internal fun FavouritesRow(state: UiState, vm: RemoteViewModel, open: (String) -
             }
         }
     }
+}
+
+/** For apps the box doesn't report (NetMirror): a tile that opens them by name, with an optional code. */
+@Composable
+private fun AddByNameDialog(onDismiss: () -> Unit, onAdd: (String, String?) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add app by name") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it.take(40) }, singleLine = true, label = { Text("Name on the TV") })
+                OutlinedTextField(value = code, onValueChange = { code = it.take(20) }, singleLine = true, label = { Text("Code it asks for (optional)") })
+                Text(
+                    "Tapping the tile turns on the mic: say \"Open\" and the name. If the app asks for the code, My Tv offers to type it.",
+                    fontSize = 12.sp,
+                    color = Palette.Muted,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onAdd(name, code.ifBlank { null }) }, enabled = name.isNotBlank()) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** A code an app asks for when it opens (for example an OTP that stays the same); empty removes it. */
+@Composable
+private fun CodeDialog(name: String, current: String, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
+    var code by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Code for $name") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = code, onValueChange = { code = it.take(20) }, singleLine = true, label = { Text("Code") })
+                Text("After opening $name from its tile, My Tv offers to type this code and press Enter.", fontSize = 12.sp, color = Palette.Muted)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(code.ifBlank { null }) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** A new name for an app tile; apps opened by voice are opened with this name ("Open <name>"). */

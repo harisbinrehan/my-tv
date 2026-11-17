@@ -90,6 +90,14 @@ const val YOUTUBE_PACKAGE = "com.google.android.youtube.tv"
 private const val YOUTUBE_SEARCH = "https://www.youtube.com/results?search_query="
 private const val PLAY_STORE = "com.android.vending"
 private const val ASSISTANT = "com.google.android.katniss"
+const val SCREENSAVER = "com.google.android.backdrop"
+
+/** Apps the box doesn't report or can't open by link: kept by name and opened by saying "Open <name>". */
+const val VOICE_APP_PREFIX = "voice:"
+private const val CODE_WINDOW_MS = 60_000L
+
+/** A code waiting to be typed into an app just opened by name (for example NetMirror's OTP). */
+data class CodePrompt(val app: String, val name: String, val code: String, val until: Long)
 private const val NOT_FOUND = "Can't find the Shoq box. Is it on, and is this phone on the same Wi-Fi?"
 private const val NOT_CONNECTED = "Not connected to the box yet."
 internal const val NO_WIFI ="This phone isn't on Wi-Fi. Join your home Wi-Fi to reach the TV."
@@ -105,6 +113,7 @@ val CHANNEL_CATEGORIES = listOf("News", "Sports", "Entertainment", "Movies", "Ki
 
 /** Screens the box reports as apps that don't belong in the Apps grid; live TV has its own section. */
 private val NOT_APPS = setOf(
+    SCREENSAVER,
     HOME_PACKAGE, LIVE_TV_PACKAGE, "com.google.android.tvlauncher", "com.google.android.apps.tv.launcherx",
     SETTINGS_PACKAGE, ASSISTANT, "com.android.systemui", "com.google.android.tungsten.setupwraith", "android",
 )
@@ -576,6 +585,73 @@ class TvLink(private val app: Application) {
         }
     }
 
+    private val _codePrompt = MutableStateFlow<CodePrompt?>(null)
+
+    /** The code to offer (and type when a text box gets focus) for a minute after opening an app by name. */
+    val codePrompt: StateFlow<CodePrompt?> = _codePrompt.asStateFlow()
+
+    /** Apps whose tile opens them by voice: added by name, or with no Play Store page to open them through. */
+    fun opensByVoice(packageName: String): Boolean = packageName.startsWith(VOICE_APP_PREFIX) || storage.noPlayPage(packageName)
+
+    /** Called just before the mic opens [packageName] by name; readies its code, if it has one. */
+    fun prepareVoiceOpen(packageName: String) {
+        val code = storage.appCode(packageName)
+        val name = nameOf(packageName)
+        Trace.i("open $name by voice" + if (code != null) " (code ready)" else "")
+        if (code == null) {
+            _codePrompt.value = null
+            return
+        }
+        val prompt = CodePrompt(packageName, name, code, System.currentTimeMillis() + CODE_WINDOW_MS)
+        _codePrompt.value = prompt
+        scope.launch {
+            delay(CODE_WINDOW_MS)
+            _codePrompt.update { if (it == prompt) null else it }
+        }
+    }
+
+    /** Types the waiting code and presses Enter. Only on request, or when the box says a text box got focus. */
+    fun enterCode() {
+        val prompt = _codePrompt.value ?: return
+        if (client == null) return notify(NOT_CONNECTED)
+        _codePrompt.value = null
+        Trace.i("typing the code for ${prompt.name}")
+        withClient {
+            it.sendText(prompt.code)
+            it.sendKey(Keys.ENTER)
+        }
+        notify("Entered the code for ${prompt.name}.")
+    }
+
+    fun dismissCode() {
+        _codePrompt.value = null
+    }
+
+    fun setAppCode(packageName: String, code: String?) {
+        storage.setAppCode(packageName, code?.trim()?.takeIf { it.isNotEmpty() })
+        Trace.i("code for ${nameOf(packageName)} " + if (code.isNullOrBlank()) "cleared" else "set")
+    }
+
+    fun appCode(packageName: String): String? = storage.appCode(packageName)
+
+    /** A tile for an app the box doesn't report (NetMirror): opened by saying its name, with an optional code. */
+    fun addVoiceApp(name: String, code: String?) {
+        val clean = name.trim().take(40)
+        if (clean.isEmpty()) return
+        val key = VOICE_APP_PREFIX + clean
+        synchronized(listLock) {
+            val apps = storage.apps
+            if (key !in apps) {
+                val updated = apps + key
+                storage.apps = updated
+                _state.update { it.copy(apps = updated) }
+            }
+        }
+        renameApp(key, clean)
+        setAppCode(key, code)
+        notify("$clean is in Apps. Tap it, then say \"Open $clean\".")
+    }
+
     /** Real apps only: not the home screen, Live TV, Settings, the Play Store's own pages or the Assistant. */
     fun canSave(packageName: String?): Boolean = packageName != null && packageName !in NOT_APPS
 
@@ -683,7 +759,7 @@ class TvLink(private val app: Application) {
     private suspend fun awaitApp(timeoutMs: Long, predicate: (String) -> Boolean): String? =
         withTimeoutOrNull(timeoutMs) { _state.first { state -> state.currentApp?.let(predicate) == true }.currentApp }
 
-    private fun nameOf(packageName: String): String = _state.value.meta[packageName]?.label ?: fallbackLabel(packageName)
+    fun nameOf(packageName: String): String = _state.value.meta[packageName]?.label ?: fallbackLabel(packageName)
 
     private fun onAppSeen(packageName: String) {
         val previous = _state.value.currentApp
@@ -710,7 +786,7 @@ class TvLink(private val app: Application) {
 
     private fun refreshMeta(packages: Collection<String>) {
         for (pkg in packages.distinct()) {
-            if (pkg == SETTINGS_PACKAGE || _state.value.meta.containsKey(pkg)) continue
+            if (pkg == SETTINGS_PACKAGE || pkg.startsWith(VOICE_APP_PREFIX) || _state.value.meta.containsKey(pkg)) continue
             val claimed = synchronized(fetching) { fetching.add(pkg) }
             if (!claimed) continue
             scope.launch {
@@ -821,6 +897,15 @@ class TvLink(private val app: Application) {
             override fun onCurrentApp(packageName: String) = onAppSeen(packageName)
             override fun onImeShow() {
                 Trace.i("the TV asked for a keyboard")
+                // A text box right after opening an app by name is most likely its code screen: type the code.
+                val prompt = _codePrompt.value
+                if (prompt != null && System.currentTimeMillis() < prompt.until && !_state.value.listening) {
+                    scope.launch {
+                        delay(600)
+                        enterCode()
+                    }
+                    return
+                }
                 imeChannel.trySend(Unit)
             }
             override fun onClosed(error: Throwable?) {

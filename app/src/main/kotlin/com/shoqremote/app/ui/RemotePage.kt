@@ -342,10 +342,12 @@ private fun VolumeCard(state: UiState, vm: RemoteViewModel, modifier: Modifier) 
                 muted && dragging == null -> "Muted"
                 else -> "${shown.roundToInt()}"
             },
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             color = Palette.Muted,
-            modifier = Modifier.width(48.dp).padding(start = 6.dp),
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.width(60.dp).padding(start = 6.dp),
         )
     }
 }

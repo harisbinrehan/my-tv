@@ -69,6 +69,24 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     fun canSave(packageName: String?) = link.canSave(packageName)
 
+    val codePrompt = link.codePrompt
+
+    fun opensByVoice(packageName: String) = link.opensByVoice(packageName)
+
+    fun prepareVoiceOpen(packageName: String) = link.prepareVoiceOpen(packageName)
+
+    fun enterCode() = link.enterCode()
+
+    fun dismissCode() = link.dismissCode()
+
+    fun appCode(packageName: String) = link.appCode(packageName)
+
+    fun setAppCode(packageName: String, code: String?) = link.setAppCode(packageName, code)
+
+    fun addVoiceApp(name: String, code: String?) = link.addVoiceApp(name, code)
+
+    fun appName(packageName: String) = link.nameOf(packageName)
+
     fun saveApp(packageName: String, name: String, favourite: Boolean) = link.saveApp(packageName, name, favourite)
 
     fun saveChannel(channel: TvChannel, replacing: Int? = null) = link.saveChannel(channel, replacing)
