@@ -41,7 +41,6 @@ class TvLinkService : Service() {
     private lateinit var link: TvLink
     private lateinit var session: MediaSession
     private lateinit var notifications: NotificationManager
-    private var playing = true
     private var shown: Card? = null
     private var idleStop: Job? = null
     private var tvVolume: VolumeProvider? = null
@@ -106,7 +105,7 @@ class TvLinkService : Service() {
             link.state.collect {
                 syncVolumeKeys(it)
                 render(cardOf(it))
-                Widgets.refresh(this@TvLinkService, it, it.nowPlaying()?.playing ?: playing)
+                Widgets.refresh(this@TvLinkService, it)
             }
         }
     }
@@ -138,7 +137,6 @@ class TvLinkService : Service() {
     /** From the notification or a widget; a tap that beats the connection waits for it (5 s) instead of being lost. */
     private fun press(key: Int) {
         if (key == 0) return
-        if (key == Keys.MEDIA_PLAY_PAUSE) playing = !playing
         if (link.state.value.link == Link.CONNECTED) {
             link.key(key)
         } else {
@@ -149,11 +147,12 @@ class TvLinkService : Service() {
             }
         }
         render(cardOf(link.state.value))
-        Widgets.refresh(this, link.state.value, link.state.value.nowPlaying()?.playing ?: playing)
+        Widgets.refresh(this, link.state.value)
     }
 
     private fun cardOf(state: UiState): Card {
         val muted = state.volume?.muted == true
+        val playing = state.isPlaying()
         return when {
             state.link == Link.NOT_PAIRED -> Card("My Tv", "Open My Tv to pair it with your Shoq box", Mode.NONE, muted, playing)
             state.opening == POWER_TARGET -> Card("Turning on your TV...", "Waking the Shoq box", Mode.NONE, muted, playing)
@@ -178,7 +177,7 @@ class TvLinkService : Service() {
                         listOfNotNull(title, media.subtitle).joinToString(" · "),
                         Mode.CONTROLS,
                         muted,
-                        media.playing ?: playing,
+                        playing,
                         volumeKeys = volumeKeys,
                         known = media.playing != null,
                         positionMs = media.positionSec?.let { (it * 1000).toLong() } ?: PlaybackState.PLAYBACK_POSITION_UNKNOWN,

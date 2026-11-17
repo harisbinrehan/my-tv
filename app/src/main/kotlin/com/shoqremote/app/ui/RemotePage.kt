@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -83,6 +82,7 @@ import com.shoqremote.app.Link
 import com.shoqremote.app.RemoteViewModel
 import com.shoqremote.app.UiState
 import com.shoqremote.app.fallbackLabel
+import com.shoqremote.app.isPlaying
 import com.shoqremote.app.nowPlaying
 import com.shoqremote.atv.CastMediaInfo
 import kotlinx.coroutines.delay
@@ -180,7 +180,7 @@ private fun NowCard(
             NowHeader(state, media, openApps, onSave, Modifier.fillMaxWidth().height(NOW_HEADER))
             Progress(media, Modifier.fillMaxWidth().height(PROGRESS).padding(horizontal = 14.dp))
         }
-        PlayControls(onKey, playing?.playing, Modifier.fillMaxWidth().weight(1f))
+        PlayControls(onKey, state.isPlaying(), Modifier.fillMaxWidth().weight(1f))
     }
 }
 
@@ -522,29 +522,22 @@ private fun Shortcut(
 }
 
 /**
- * Rewind, play or pause, and fast forward. The middle icon follows what the app on the TV reports (pause while it
- * plays, play while paused); when it reports nothing, it shows both, since the key toggles.
+ * Rewind, play or pause, and fast forward. The middle icon is pause while the TV plays and play otherwise: from what
+ * the app reports over Cast, or for apps that don't, from the presses ([UiState.isPlaying]).
  */
 @Composable
-private fun PlayControls(onKey: (Int, Int) -> Unit, playing: Boolean?, modifier: Modifier) {
+private fun PlayControls(onKey: (Int, Int) -> Unit, playing: Boolean, modifier: Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         KeyButton(onKey, Keys.MEDIA_REWIND, "Rewind", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {
             Icon(Icons.Rounded.FastRewind, null, Modifier.size(24.dp), tint = Palette.Text)
         }
         Box(Modifier.width(1.dp).height(22.dp).background(Palette.Line))
-        val label = when (playing) {
-            true -> "Pause"
-            false -> "Play"
-            null -> "Play or pause"
-        }
+        val label = if (playing) "Pause" else "Play"
         KeyButton(onKey, Keys.MEDIA_PLAY_PAUSE, label, Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {
-            when (playing) {
-                true -> Icon(Icons.Rounded.Pause, null, Modifier.size(28.dp), tint = Palette.Text)
-                false -> Icon(Icons.Rounded.PlayArrow, null, Modifier.size(30.dp), tint = Palette.Text)
-                null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.PlayArrow, null, Modifier.size(24.dp), tint = Palette.Text)
-                    Icon(Icons.Rounded.Pause, null, Modifier.size(20.dp).offset(x = (-3).dp), tint = Palette.Text)
-                }
+            if (playing) {
+                Icon(Icons.Rounded.Pause, null, Modifier.size(28.dp), tint = Palette.Text)
+            } else {
+                Icon(Icons.Rounded.PlayArrow, null, Modifier.size(30.dp), tint = Palette.Text)
             }
         }
         Box(Modifier.width(1.dp).height(22.dp).background(Palette.Line))

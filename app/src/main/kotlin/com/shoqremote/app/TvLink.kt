@@ -83,6 +83,11 @@ data class UiState(
     val volumeButtons: Boolean = true,
     /** What the box's Cast receiver says is playing; see [nowPlaying] for the part that belongs to the app on screen. */
     val media: CastMediaInfo? = null,
+    /**
+     * Whether the app on screen is playing, for apps that don't report it: Play/Pause presses flip it, a new app
+     * resets it (Live TV starts playing, others don't), and a report from the TV overrides it.
+     */
+    val playGuess: Boolean = false,
     val pairing: PairingStep = PairingStep.IDLE,
     val pairingMessage: String? = null,
 )
@@ -101,6 +106,9 @@ fun UiState.nowPlaying(): CastMediaInfo? {
     val b = key(label)
     return playing.takeIf { a.isNotEmpty() && b.isNotEmpty() && (a in b || b in a) }
 }
+
+/** Whether the TV is playing: what the app reports over Cast, otherwise the guess kept from Play/Pause presses. */
+fun UiState.isPlaying(): Boolean = nowPlaying()?.playing ?: playGuess
 
 const val SETTINGS_PACKAGE = "com.android.tv.settings"
 const val HOME_PACKAGE = "com.launcher.ptcl"
@@ -257,6 +265,9 @@ class TvLink(private val app: Application) {
     fun key(code: Int, direction: Int = Direction.SHORT) {
         val name = Trace.key(code) + if (direction == Direction.SHORT) "" else if (direction == Direction.START_LONG) " (hold)" else " (release)"
         if (client == null) Trace.w("$name not sent: not connected") else Trace.i(name)
+        if (client != null && code == Keys.MEDIA_PLAY_PAUSE && direction == Direction.SHORT) {
+            _state.update { it.copy(playGuess = !it.isPlaying()) }
+        }
         withClient { it.sendKey(code, direction) }
     }
 
@@ -792,7 +803,9 @@ class TvLink(private val app: Application) {
 
     private fun onAppSeen(packageName: String) {
         val previous = _state.value.currentApp
-        _state.update { it.copy(currentApp = packageName) }
+        _state.update {
+            if (it.currentApp == packageName) it else it.copy(currentApp = packageName, playGuess = packageName == LIVE_TV_PACKAGE)
+        }
         // A different app means a different text box: what was typed belongs to the old one.
         if (previous != null && previous != packageName) {
             desiredText = ""
@@ -977,7 +990,7 @@ class TvLink(private val app: Application) {
                     watcher.run { info ->
                         // Titles stay out of the log: only the app and whether it plays.
                         Trace.i("playing: ${info?.let { "${it.app} ${if (it.playing == true) "playing" else if (it.playing == false) "paused" else "idle"}" } ?: "nothing"}")
-                        _state.update { it.copy(media = info) }
+                        _state.update { it.copy(media = info, playGuess = info?.playing ?: it.playGuess) }
                     }
                 }
             } catch (e: IOException) {

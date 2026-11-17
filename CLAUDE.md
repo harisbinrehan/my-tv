@@ -33,7 +33,16 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 20: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 21: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 21 (2026-11-17)
+
+- The play button never shows play and pause together any more (the owner disliked it). One icon from
+  `UiState.isPlaying()`: the app's Cast report when there is one, otherwise `playGuess`, which Play/Pause presses
+  flip, a new app on screen resets (Live TV starts as playing, everything else as not), and Cast reports
+  overwrite. The service's own `playing` flag is gone; the app, notification and widget share the guess. The
+  notification's player card still reports "playing" without a Cast report while it holds the volume buttons.
+- Tested on the emulator against the box on the home screen: one play icon, a tap flips it to pause, another back.
 
 ### Version 20 (2026-11-17)
 
@@ -52,9 +61,8 @@ Requests made over the build, all implemented in version 3 unless noted:
   play state and a progress bar. A video reported paused shows as paused, and then the phone's volume buttons are
   the phone's until it plays again (Android only routes them to a playing session). Remote playback makes Android
   draw an "Other device" chip on the player card.
-- Tested on the emulator against the box with YouTube playing: card, progress, pause icon, notification. Not
-  tested: the icon flipping on pause (that would have paused the owner's video); expected within a moment, at the
-  latest on the next 15 s poll.
+- Tested on the emulator against the box with YouTube playing: card, progress, pause icon, notification. The owner
+  confirmed on the phone that the icon flips to play when YouTube is paused.
 
 ### Version 19 (2026-11-17)
 

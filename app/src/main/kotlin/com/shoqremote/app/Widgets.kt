@@ -20,7 +20,7 @@ object Widgets {
     @Volatile private var shown: Look? = null
 
     /** Redraws every placed widget, only when something they show has changed. */
-    fun refresh(context: Context, state: UiState, playing: Boolean = true, force: Boolean = false) {
+    fun refresh(context: Context, state: UiState, playing: Boolean = state.isPlaying(), force: Boolean = false) {
         val look = lookOf(state, playing)
         if (!force && look == shown) return
         shown = look
