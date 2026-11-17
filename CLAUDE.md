@@ -33,7 +33,20 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 16: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 17: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 17 (2026-11-17, owner's reference design)
+
+- Remote page rebuilt in `ui/RemotePage.kt` after the owner's mockup: What's on card (app icon, name, Save or ›),
+  volume card (mute, slider, level), big pad, labelled Back / Home / Voice, media bar, tiles Keyboard / Live TV /
+  Settings. The What's on card shows only when the pad still gets 220 dp. The floating Type button is hidden on the
+  remote (Keyboard tile) and stays on Apps and TV.
+- Volume slider: the box has no absolute volume, so `TvLink.setVolume` steps Up/Down until the box reports the
+  target (stops if it stops answering). In standby the box reports 15/15, so the card is idle then.
+- Save on the What's on card (`TvLink.saveApp`): keeps the running app in Apps under a chosen name, optionally a
+  favourite (for NetMirror, which the box reports as com.netflix.ninja).
+- Checked at 1080x2316, 450 dpi, font 1.15 with the TV in standby. Not yet checked on the box: the slider stepping
+  and the Save dialog (both need the TV on).
 
 ### Version 16 (2026-11-16)
 

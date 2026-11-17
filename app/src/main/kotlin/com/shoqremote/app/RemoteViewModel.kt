@@ -53,6 +53,10 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openTvSettings() = link.openTvSettings()
 
+    fun openLiveTv() = link.openLiveTv()
+
+    fun setVolume(level: Int) = link.setVolume(level)
+
     fun watchChannel(number: Int) = link.watchChannel(number)
 
     fun toggleVoiceSearch() = link.toggleVoiceSearch()
@@ -62,6 +66,10 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     fun removeApp(packageName: String) = link.removeApp(packageName)
 
     fun renameApp(packageName: String, name: String) = link.renameApp(packageName, name)
+
+    fun canSave(packageName: String?) = link.canSave(packageName)
+
+    fun saveApp(packageName: String, name: String, favourite: Boolean) = link.saveApp(packageName, name, favourite)
 
     fun saveChannel(channel: TvChannel, replacing: Int? = null) = link.saveChannel(channel, replacing)
 

@@ -98,6 +98,7 @@ private const val WIFI_RECHECK_MS = 60_000L
 private const val VOICE_RATE = 8_000
 private const val VOICE_CHUNK = 16 * 1024
 private const val VOICE_MAX_MS = 10_000L
+private const val MAX_VOLUME_STEPS = 30
 
 
 val CHANNEL_CATEGORIES = listOf("News", "Sports", "Entertainment", "Movies", "Kids", "Islamic", "Infotainment", "Music", "Regional", "Other")
@@ -141,6 +142,7 @@ class TvLink(private val app: Application) {
     private var linkJob: Job? = null
     private var openJob: Job? = null
     private var voiceJob: Job? = null
+    private var volumeJob: Job? = null
     private val holders = HashSet<String>()
     private val fetching = HashSet<String>()
     private val listLock = Any()
@@ -328,6 +330,37 @@ class TvLink(private val app: Application) {
             remote.sendKey(Keys.DPAD_CENTER)
             if (awaitApp(6_000) { it == SETTINGS_PACKAGE } == null) {
                 notify("Settings didn't open. On the TV's home screen, press Up, then OK.")
+            }
+        }
+    }
+
+    /** Live TV is ZTE's player, reached with OK from the PTCL home screen. */
+    fun openLiveTv() {
+        val remote = client ?: return notify(NOT_CONNECTED)
+        if (_state.value.currentApp == LIVE_TV_PACKAGE) return
+        Trace.i("open live TV")
+        runOpening(LIVE_TV_PACKAGE) {
+            remote.sendKey(Keys.HOME)
+            delay(1_500)
+            remote.sendKey(Keys.DPAD_CENTER)
+            if (awaitApp(6_000) { it == LIVE_TV_PACKAGE } == null) notify("Live TV didn't open. Press OK on the TV's home screen.")
+        }
+    }
+
+    /**
+     * The box can't jump to a volume: this presses up or down one step at a time until it reports [target], and
+     * stops if it stops answering (for example while muted, where Up may only unmute).
+     */
+    fun setVolume(target: Int) {
+        val remote = client ?: return notify(NOT_CONNECTED)
+        volumeJob?.cancel()
+        Trace.i("volume to $target")
+        volumeJob = scope.launch {
+            repeat(MAX_VOLUME_STEPS) {
+                val before = _state.value.volume?.level ?: return@launch
+                if (before == target) return@launch
+                remote.sendKey(if (target > before) Keys.VOLUME_UP else Keys.VOLUME_DOWN)
+                withTimeoutOrNull(900) { _state.first { it.volume?.level != before } } ?: return@launch
             }
         }
     }
@@ -541,6 +574,26 @@ class TvLink(private val app: Application) {
                 _state.update { if (it.opening == target) it.copy(opening = null) else it }
             }
         }
+    }
+
+    /** Real apps only: not the home screen, Live TV, Settings, the Play Store's own pages or the Assistant. */
+    fun canSave(packageName: String?): Boolean = packageName != null && packageName !in NOT_APPS
+
+    /** Keeps the app on screen in Apps under the owner's name, optionally among favourites. */
+    fun saveApp(packageName: String, name: String, favourite: Boolean) {
+        if (!canSave(packageName)) return
+        synchronized(listLock) {
+            val apps = storage.apps
+            if (packageName !in apps) {
+                val updated = apps + packageName
+                storage.apps = updated
+                _state.update { it.copy(apps = updated) }
+            }
+            if (favourite != packageName in storage.favourites) toggleFavourite(packageName)
+        }
+        renameApp(packageName, name)
+        Trace.i("saved $packageName as \"${name.trim()}\"${if (favourite) " (favourite)" else ""}")
+        notify("${name.trim()} is in Apps.")
     }
 
     /** A name the owner chose for an app tile; it's also the name the mic hint suggests saying. */
