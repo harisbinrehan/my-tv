@@ -33,7 +33,29 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 18: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 19: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 19 (2026-11-17)
+
+- Remote: the Live TV and Settings tiles are gone (Live TV is the bottom bar's TV tab, TV settings is in the ⋮
+  menu). Keyboard joined the key row: Back / Home / Assistant / Keyboard ("Voice" renamed Assistant, since it is
+  the TV's Google Assistant). The pad can now grow to 300 dp; keys and media bar are a little taller.
+- Volume card: mute, − and + back (hold to repeat, `KeyButton` with repeat), and the slider's knob shows the
+  level. While muted the level stays and the track turns grey.
+- Phone volume buttons: in the app (`MainActivity.onKeyDown`/`onKeyUp`, both consumed so the phone's panel
+  stays away) and with the app closed (`TvLinkService` puts the media session on remote playback with an
+  absolute `VolumeProvider` holding the TV's level, so Android sends the buttons to the TV and its volume panel
+  shows the TV's level). Only while connected, the TV on and its volume known; otherwise the session is local
+  and the buttons are the phone's. Android only routes them to a playing session, so the session reports
+  PLAYING while it has them (the player card's play/pause icon then stays on pause). Music playing on the
+  phone still wins. Menu toggle "Phone volume buttons control the TV" (`Storage.volumeButtons`, on by default)
+  covers both.
+- Card look shared from `Theme.kt` (`CardShape`, `CardBrush`, `Modifier.card()`), now also on the TV page (search
+  field, chips, channel rows, dial row) and the Apps tiles.
+- Tested on the emulator against the box (TV on Live TV, muted at 0, so only Volume down was used, then re-muted):
+  volume button in the app and in the background (Android logged "Adjusting com.shoqremote.app/My Tv by -1"),
+  the phone's panel showed the TV slider, the card's − button, toggle off gave the buttons back to the phone.
+  Not tested on the owner's Samsung: whether One UI routes the buttons to the session the same way.
 
 ### Version 18 (2026-11-17)
 

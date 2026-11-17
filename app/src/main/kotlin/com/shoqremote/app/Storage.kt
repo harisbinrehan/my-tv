@@ -54,6 +54,11 @@ class Storage(context: Context) {
         get() = prefs.getBoolean("notification_controls", true)
         set(value) = prefs.edit().putBoolean("notification_controls", value).apply()
 
+    /** Whether the phone's volume buttons drive the TV while it's on (in the app, and through the notification). */
+    var volumeButtons: Boolean
+        get() = prefs.getBoolean("volume_buttons", true)
+        set(value) = prefs.edit().putBoolean("volume_buttons", value).apply()
+
     var askedBackground: Boolean
         get() = prefs.getBoolean("asked_background", false)
         set(value) = prefs.edit().putBoolean("asked_background", value).apply()

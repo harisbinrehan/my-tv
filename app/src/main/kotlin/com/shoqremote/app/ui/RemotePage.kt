@@ -41,10 +41,11 @@ import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -74,22 +75,18 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shoqremote.app.HOME_PACKAGE
-import com.shoqremote.app.LIVE_TV_PACKAGE
 import com.shoqremote.app.Link
 import com.shoqremote.app.RemoteViewModel
-import com.shoqremote.app.SETTINGS_PACKAGE
 import com.shoqremote.app.UiState
 import com.shoqremote.app.fallbackLabel
 import com.shoqremote.atv.Keys
 import kotlin.math.roundToInt
 
-private val CardShape = RoundedCornerShape(22.dp)
-private val CardBrush = Brush.verticalGradient(listOf(Color(0xFF18181C), Color(0xFF121215)))
-
 /**
  * The remote, styled after the owner's reference design: what's on and the volume at the top, then the big pad,
- * Back / Home / Voice, the media bar and shortcut tiles low, within the thumb's reach. Sized from the space
- * available, so it never scrolls; the What's on card only shows when the pad still gets 220 dp.
+ * Back / Home / Assistant / Keyboard and the media bar low, within the thumb's reach. Live TV and TV settings live
+ * in the bottom bar and the menu, so they aren't repeated here. Sized from the space available, so it never
+ * scrolls; the What's on card only shows when the pad still gets 220 dp.
  */
 @Composable
 internal fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit, onType: () -> Unit, openApps: () -> Unit) {
@@ -108,16 +105,15 @@ internal fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit
     BoxWithConstraints(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp)) {
         val compact = maxHeight < 600.dp
         val gap = if (compact) 10.dp else 12.dp
-        val volume = if (compact) 52.dp else 56.dp
-        val keys = if (compact) 58.dp else 64.dp
-        val media = if (compact) 48.dp else 52.dp
-        val tiles = if (compact) 62.dp else 68.dp
+        val volume = if (compact) 54.dp else 60.dp
+        val keys = if (compact) 60.dp else 68.dp
+        val media = if (compact) 50.dp else 56.dp
         val now = 64.dp
-        // Volume, keys, media and tiles, the three gaps below the pad, and at least one gap above it.
-        val fixed = volume + keys + media + tiles + gap * 4
+        // Volume, keys and media, the two gaps below the pad, and at least one gap above it.
+        val fixed = volume + keys + media + gap * 3
         val showNow = maxHeight - fixed - now - gap >= 220.dp
         val pad = (maxHeight - fixed - if (showNow) now + gap else 0.dp)
-            .coerceAtMost(290.dp)
+            .coerceAtMost(300.dp)
             .coerceAtMost(maxWidth - 40.dp)
             .coerceAtLeast(150.dp)
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -136,20 +132,15 @@ internal fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit
                 LabeledKey(onKey, Keys.HOME, Icons.Rounded.Home, "Home", Modifier.weight(1f).fillMaxHeight())
                 Shortcut(
                     Icons.Rounded.Mic,
-                    if (state.listening) "Listening" else "Voice",
+                    if (state.listening) "Listening" else "Assistant",
                     Modifier.weight(1f).fillMaxHeight(),
                     selected = state.listening,
                     onClick = onVoice,
                 )
+                Shortcut(Icons.Rounded.Keyboard, "Keyboard", Modifier.weight(1f).fillMaxHeight(), accent = true, onClick = onType)
             }
             Spacer(Modifier.height(gap))
             MediaBar(onKey, Modifier.fillMaxWidth().height(media))
-            Spacer(Modifier.height(gap))
-            Row(Modifier.fillMaxWidth().height(tiles), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Shortcut(Icons.Rounded.Keyboard, "Keyboard", Modifier.weight(1f).fillMaxHeight(), accent = true, onClick = onType)
-                Shortcut(Icons.Rounded.LiveTv, "Live TV", Modifier.weight(1f).fillMaxHeight(), busy = state.opening == LIVE_TV_PACKAGE, onClick = vm::openLiveTv)
-                Shortcut(Icons.Rounded.Settings, "Settings", Modifier.weight(1f).fillMaxHeight(), busy = state.opening == SETTINGS_PACKAGE, onClick = vm::openTvSettings)
-            }
         }
     }
 }
@@ -175,9 +166,7 @@ private fun NowCard(state: UiState, openApps: () -> Unit, onSave: (() -> Unit)?,
     val icon = remember(path) { path?.let { BitmapFactory.decodeFile(it)?.asImageBitmap() } }
     Row(
         modifier
-            .clip(CardShape)
-            .background(CardBrush)
-            .border(1.dp, Palette.Line, CardShape)
+            .card()
             .clickable(onClickLabel = "Open Apps", role = Role.Button, onClick = openApps)
             .padding(start = 12.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -253,35 +242,39 @@ private fun SaveAppDialog(name: String, favourite: Boolean, onDismiss: () -> Uni
 }
 
 /**
- * Mute, a slider and the level. The box can't jump to a level, so letting go of the slider steps the volume up or
- * down until the box reports the chosen level; while dragging, the slider shows where it will go.
+ * Mute, − and + (hold to keep going), and a slider whose knob shows the level. The box can't jump to a level, so
+ * letting go of the slider steps the volume up or down until the box reports the chosen level.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VolumeCard(state: UiState, vm: RemoteViewModel, modifier: Modifier) {
     // In standby the box reports a fixed volume, so the card waits until the TV is on.
     val volume = state.volume?.takeIf { state.link == Link.CONNECTED && state.power != false }
+    val live = volume != null
     val muted = volume?.muted == true
     var dragging by remember { mutableStateOf<Float?>(null) }
     val max = (volume?.max ?: 15).coerceAtLeast(1)
-    val shown = dragging ?: (if (muted) 0f else volume?.level?.toFloat() ?: 0f)
+    val shown = dragging ?: volume?.level?.toFloat() ?: 0f
     val view = LocalView.current
+    // While muted the level is kept but drawn grey, so it's clear nothing is playing out loud.
     val trackColors = SliderDefaults.colors(
-        activeTrackColor = Palette.Indigo,
+        activeTrackColor = if (muted && dragging == null) Palette.Muted else Palette.Indigo,
         inactiveTrackColor = Palette.Line,
         disabledActiveTrackColor = Palette.Line,
         disabledInactiveTrackColor = Palette.Line,
     )
+    val step: (Int, Int) -> Unit = { code, direction -> if (live) vm.key(code, direction) }
     Row(
-        modifier.clip(CardShape).background(CardBrush).border(1.dp, Palette.Line, CardShape).padding(horizontal = 8.dp),
+        modifier.card().padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
-                .size(40.dp)
+                .size(42.dp)
                 .clip(CircleShape)
                 .then(if (muted) Modifier.background(Palette.accent()) else Modifier.background(Palette.Raised))
-                .clickable(onClickLabel = if (muted) "Unmute" else "Mute", role = Role.Button) {
+                .border(1.dp, if (muted) Color.Transparent else Palette.Line, CircleShape)
+                .clickable(enabled = live, onClickLabel = if (muted) "Unmute" else "Mute", role = Role.Button) {
                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     vm.key(Keys.VOLUME_MUTE)
                 },
@@ -291,10 +284,11 @@ private fun VolumeCard(state: UiState, vm: RemoteViewModel, modifier: Modifier) 
                 if (muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
                 if (muted) "Unmute" else "Mute",
                 Modifier.size(20.dp),
-                tint = Palette.Text,
+                tint = if (live) Palette.Text else Palette.Muted,
             )
         }
         Spacer(Modifier.width(8.dp))
+        StepKey(step, Keys.VOLUME_DOWN, "Volume down", Icons.Rounded.Remove, live)
         Slider(
             value = shown.coerceIn(0f, max.toFloat()),
             onValueChange = { dragging = it },
@@ -304,53 +298,47 @@ private fun VolumeCard(state: UiState, vm: RemoteViewModel, modifier: Modifier) 
             },
             valueRange = 0f..max.toFloat(),
             steps = (max - 1).coerceAtLeast(0),
-            enabled = volume != null,
-            modifier = Modifier.weight(1f),
+            enabled = live,
+            modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
             thumb = {
                 Box(
                     Modifier
-                        .size(22.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
-                        .background(if (volume != null) Palette.Text else Palette.Muted),
-                )
+                        .background(if (live) Palette.Text else Palette.Raised),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (live) "${shown.roundToInt()}" else "–",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (live) Palette.Background else Palette.Muted,
+                        maxLines = 1,
+                    )
+                }
             },
             track = { slider ->
                 SliderDefaults.Track(
                     sliderState = slider,
                     modifier = Modifier.height(6.dp),
-                    enabled = volume != null,
+                    enabled = live,
                     colors = trackColors,
                     drawStopIndicator = null,
                     drawTick = { _, _ -> },
                     thumbTrackGapSize = 0.dp,
                 )
             },
-            colors = SliderDefaults.colors(
-                thumbColor = Palette.Text,
-                activeTrackColor = Palette.Indigo,
-                inactiveTrackColor = Palette.Line,
-                activeTickColor = Color.Transparent,
-                inactiveTickColor = Color.Transparent,
-                disabledThumbColor = Palette.Muted,
-                disabledActiveTrackColor = Palette.Line,
-                disabledInactiveTrackColor = Palette.Line,
-            ),
         )
-        Text(
-            when {
-                volume == null -> "–"
-                muted && dragging == null -> "Muted"
-                else -> "${shown.roundToInt()}"
-            },
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = Palette.Muted,
-            maxLines = 1,
-            softWrap = false,
-            modifier = Modifier.width(60.dp).padding(start = 6.dp),
-        )
+        StepKey(step, Keys.VOLUME_UP, "Volume up", Icons.Rounded.Add, live)
     }
 }
+
+/** A round − or + that steps the volume, and keeps stepping while held. */
+@Composable
+private fun StepKey(onKey: (Int, Int) -> Unit, code: Int, label: String, icon: ImageVector, enabled: Boolean) =
+    KeyButton(onKey, code, label, Modifier.size(42.dp), repeat = true) {
+        Icon(icon, null, Modifier.size(22.dp), tint = if (enabled) Palette.Text else Palette.Muted)
+    }
 
 /** Left and right are physical directions, so the pad stays left-to-right in every language. */
 @Composable

@@ -98,6 +98,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     fun movePinnedChannel(number: Int, by: Int) = link.movePinnedChannel(number, by)
 
     fun setNotificationControls(on: Boolean) = link.setNotificationControls(on)
+    fun setVolumeButtons(on: Boolean) = link.setVolumeButtons(on)
 
     fun forgetPairing() = link.forgetPairing()
 

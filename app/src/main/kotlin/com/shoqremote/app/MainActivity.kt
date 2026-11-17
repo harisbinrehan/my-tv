@@ -42,17 +42,28 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-    /** The phone's own volume buttons drive the box while the remote is on screen. */
+    /**
+     * The phone's own volume buttons drive the TV while My Tv is on screen and the TV is on (in standby they stay the
+     * phone's). Both the press and the release are kept from the phone, so its own volume panel doesn't pop up.
+     * With My Tv closed, the media session in [TvLinkService] does the same.
+     */
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val boxKey = when (keyCode) {
+        val boxKey = tvVolumeKey(keyCode) ?: return super.onKeyDown(keyCode, event)
+        vm.key(boxKey)
+        return true
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        tvVolumeKey(keyCode) != null || super.onKeyUp(keyCode, event)
+
+    private fun tvVolumeKey(keyCode: Int): Int? {
+        val state = vm.state.value
+        if (!state.volumeButtons || state.link != Link.CONNECTED || state.power == false) return null
+        return when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> Keys.VOLUME_UP
             KeyEvent.KEYCODE_VOLUME_DOWN -> Keys.VOLUME_DOWN
+            KeyEvent.KEYCODE_VOLUME_MUTE -> Keys.VOLUME_MUTE
             else -> null
         }
-        if (boxKey != null && vm.state.value.link == Link.CONNECTED) {
-            vm.key(boxKey)
-            return true
-        }
-        return super.onKeyDown(keyCode, event)
     }
 }

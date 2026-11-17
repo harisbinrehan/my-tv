@@ -1,6 +1,7 @@
 package com.shoqremote.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.shoqremote.app.R
 
 /** Neutral charcoal surfaces in three steps, hairline borders, and one soft indigo accent used sparingly. */
@@ -36,6 +39,12 @@ object Palette {
     /** A quiet top-to-bottom shade of the accent, for the few things that should stand out. */
     fun accent(): Brush = Brush.verticalGradient(listOf(Color(0xFF8C8CFF), Color(0xFF6560F2)))
 }
+
+/** The remote's card look, shared by every page: a soft top-to-bottom charcoal shade, a hairline edge, round corners. */
+val CardShape = RoundedCornerShape(22.dp)
+val CardBrush = Brush.verticalGradient(listOf(Color(0xFF18181C), Color(0xFF121215)))
+
+fun Modifier.card(shape: Shape = CardShape): Modifier = clip(shape).background(CardBrush).border(1.dp, Palette.Line, shape)
 
 @Composable
 fun MyTvTheme(content: @Composable () -> Unit) = MaterialTheme(

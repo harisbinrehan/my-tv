@@ -47,6 +47,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BatteryFull
@@ -456,6 +457,15 @@ private fun OverflowMenu(state: UiState, vm: RemoteViewModel) {
                 onClick = {
                     open = false
                     vm.setNotificationControls(!state.notificationControls)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Phone volume buttons control the TV") },
+                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.VolumeUp, null) },
+                trailingIcon = { if (state.volumeButtons) Icon(Icons.Rounded.Check, "On") },
+                onClick = {
+                    open = false
+                    vm.setVolumeButtons(!state.volumeButtons)
                 },
             )
             val unrestricted = Background.isUnrestricted(context)

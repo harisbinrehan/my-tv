@@ -2,6 +2,7 @@ package com.shoqremote.app.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -104,16 +107,24 @@ internal fun TvPage(state: UiState, vm: RemoteViewModel, onWatching: () -> Unit)
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            OutlinedTextField(
+            // The remote's card look: a search field without the outline, inside a card.
+            TextField(
                 value = query,
                 onValueChange = { query = it.take(40) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().card(RoundedCornerShape(20.dp)),
                 singleLine = true,
-                placeholder = { Text("Search, or type a channel number") },
-                leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                placeholder = { Text("Search or type a number", color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                leadingIcon = { Icon(Icons.Rounded.Search, null, tint = Palette.Muted) },
                 trailingIcon = {
-                    if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Clear, "Clear search") }
+                    if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Clear, "Clear search", tint = Palette.Muted) }
                 },
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = Palette.Indigo,
+                ),
                 keyboardOptions = KeyboardOptions(imeAction = if (dial != null) ImeAction.Go else ImeAction.Search),
                 keyboardActions = KeyboardActions(onGo = { dial?.let(watch) }),
             )
@@ -183,8 +194,9 @@ private fun DialRow(number: Int, state: UiState, watch: (Int) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Palette.Raised)
+            .clip(RoundedCornerShape(20.dp))
+            .background(CardBrush)
+            .border(1.dp, Palette.Indigo.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
             .clickable(onClickLabel = "Watch channel $number") { watch(number) }
             .padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -215,8 +227,7 @@ private fun ChannelRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Palette.Panel)
+            .card(RoundedCornerShape(20.dp))
             .combinedClickable(
                 onClickLabel = "Watch",
                 onLongClickLabel = "Edit channel",
@@ -281,7 +292,7 @@ private val LogoTile = Color(0xFFEDEDF0)
 @Composable
 private fun EmptyChannels() {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Palette.Panel).padding(18.dp),
+        Modifier.fillMaxWidth().card().padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Add your channels", fontWeight = FontWeight.SemiBold, color = Palette.Text)
@@ -346,8 +357,13 @@ internal fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
         fontWeight = FontWeight.Medium,
         color = if (selected) Color.White else Palette.Text,
         modifier = Modifier
-            .clip(RoundedCornerShape(percent = 50))
-            .then(if (selected) Modifier.background(Palette.accent()) else Modifier.background(Palette.Raised))
+            .then(
+                if (selected) {
+                    Modifier.clip(RoundedCornerShape(percent = 50)).background(Palette.accent())
+                } else {
+                    Modifier.card(RoundedCornerShape(percent = 50))
+                },
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
@@ -355,5 +371,5 @@ internal fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.Muted, modifier = modifier.padding(top = 4.dp))
+    Text(text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text, modifier = modifier.padding(top = 6.dp))
 }

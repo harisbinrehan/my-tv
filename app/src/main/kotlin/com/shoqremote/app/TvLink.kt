@@ -77,6 +77,7 @@ data class UiState(
     val opening: String? = null,
     val listening: Boolean = false,
     val notificationControls: Boolean = true,
+    val volumeButtons: Boolean = true,
     val pairing: PairingStep = PairingStep.IDLE,
     val pairingMessage: String? = null,
 )
@@ -464,6 +465,12 @@ class TvLink(private val app: Application) {
         if (on) TvLinkService.start(app) else TvLinkService.stop(app)
     }
 
+    fun setVolumeButtons(on: Boolean) {
+        storage.volumeButtons = on
+        Trace.i("volume buttons control the TV: $on")
+        _state.update { it.copy(volumeButtons = on) }
+    }
+
     fun forgetPairing() {
         Trace.i("pairing forgotten")
         stopLink()
@@ -549,6 +556,7 @@ class TvLink(private val app: Application) {
             channels = storage.channels,
             pinnedChannels = storage.pinnedChannels,
             notificationControls = storage.notificationControls,
+            volumeButtons = storage.volumeButtons,
         )
     }
 

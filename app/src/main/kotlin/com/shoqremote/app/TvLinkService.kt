@@ -9,6 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.VolumeProvider
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -29,6 +32,8 @@ import kotlinx.coroutines.launch
 /**
  * Keeps the TV connection open and shows a permanent notification with the app on the TV, its icon and
  * live controls. A media session gives it the player card in the notification panel and on the lock screen.
+ * While the TV is on, the session also takes the phone's volume buttons for the TV (Android routes them to a
+ * playing remote session, the way it does for a Chromecast); when the TV is off they are the phone's again.
  */
 class TvLinkService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -38,6 +43,7 @@ class TvLinkService : Service() {
     private var playing = true
     private var shown: Card? = null
     private var idleStop: Job? = null
+    private var tvVolume: VolumeProvider? = null
 
     private enum class Mode { CONTROLS, POWER, NONE }
 
@@ -47,6 +53,8 @@ class TvLinkService : Service() {
         val mode: Mode,
         val muted: Boolean,
         val playing: Boolean,
+        /** The phone's volume buttons go to the TV (only while it's on and its volume is known). */
+        val volumeKeys: Boolean = false,
     )
 
     private val callback = object : MediaSession.Callback() {
@@ -89,6 +97,7 @@ class TvLinkService : Service() {
         link.acquire(HOLDER)
         scope.launch {
             link.state.collect {
+                syncVolumeKeys(it)
                 render(cardOf(it))
                 Widgets.refresh(this@TvLinkService, it, playing)
             }
@@ -152,9 +161,44 @@ class TvLinkService : Service() {
                     null, HOME_PACKAGE -> "Home screen"
                     else -> state.meta[app]?.label ?: fallbackLabel(app)
                 }
-                Card(title, "On your TV", Mode.CONTROLS, muted, playing)
+                Card(title, "On your TV", Mode.CONTROLS, muted, playing, volumeKeys = state.volumeButtons && state.volume != null)
             }
         }
+    }
+
+    /**
+     * Hands the phone's volume buttons to the TV while it's on: the session plays "remotely" with the TV's level, so
+     * a press steps the TV's volume and the phone's volume panel shows the TV's level. Otherwise the session is
+     * local again and the buttons are the phone's. Music playing on the phone still wins: Android adjusts that.
+     */
+    private fun syncVolumeKeys(state: UiState) {
+        val volume = state.volume
+        if (cardOf(state).volumeKeys.not() || volume == null) {
+            if (tvVolume != null) {
+                tvVolume = null
+                session.setPlaybackToLocal(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
+                Trace.i("phone volume buttons: phone")
+            }
+            return
+        }
+        val max = volume.max.coerceAtLeast(1)
+        val level = volume.level.coerceIn(0, max)
+        val provider = tvVolume?.takeIf { it.maxVolume == max } ?: object : VolumeProvider(VOLUME_CONTROL_ABSOLUTE, max, level) {
+            override fun onAdjustVolume(direction: Int) {
+                when (direction) {
+                    AudioManager.ADJUST_RAISE -> link.key(Keys.VOLUME_UP)
+                    AudioManager.ADJUST_LOWER -> link.key(Keys.VOLUME_DOWN)
+                    AudioManager.ADJUST_TOGGLE_MUTE -> link.key(Keys.VOLUME_MUTE)
+                }
+            }
+
+            override fun onSetVolumeTo(volume: Int) = link.setVolume(volume)
+        }.also {
+            tvVolume = it
+            session.setPlaybackToRemote(it)
+            Trace.i("phone volume buttons: TV")
+        }
+        if (provider.currentVolume != level) provider.currentVolume = level
     }
 
     private fun render(card: Card) {
@@ -209,8 +253,9 @@ class TvLinkService : Service() {
                     PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
                         PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS,
                 )
+                // Android only sends volume buttons to a session that is playing, so it stays "playing" while it has them.
                 state.setState(
-                    if (card.playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
+                    if (card.playing || card.volumeKeys) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
                     PlaybackState.PLAYBACK_POSITION_UNKNOWN,
                     1f,
                 )

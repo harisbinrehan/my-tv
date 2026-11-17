@@ -157,8 +157,7 @@ private fun AppTile(pkg: String, state: UiState, vm: RemoteViewModel, open: (Str
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(Palette.Panel)
+                .card(RoundedCornerShape(20.dp))
                 .combinedClickable(
                     onClickLabel = "Open on the TV",
                     onLongClickLabel = "More options",
