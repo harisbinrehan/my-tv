@@ -18,6 +18,7 @@ import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.SystemClock
 import com.shoqremote.atv.Keys
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
@@ -55,6 +56,12 @@ class TvLinkService : Service() {
         val playing: Boolean,
         /** The phone's volume buttons go to the TV (only while it's on and its volume is known). */
         val volumeKeys: Boolean = false,
+        /** [playing] is what the app on the TV reported over Cast, not a guess. */
+        val known: Boolean = false,
+        val positionMs: Long = PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+        val durationMs: Long = 0,
+        /** SystemClock.elapsedRealtime() when [positionMs] was read. */
+        val readAt: Long = 0,
     )
 
     private val callback = object : MediaSession.Callback() {
@@ -99,7 +106,7 @@ class TvLinkService : Service() {
             link.state.collect {
                 syncVolumeKeys(it)
                 render(cardOf(it))
-                Widgets.refresh(this@TvLinkService, it, playing)
+                Widgets.refresh(this@TvLinkService, it, it.nowPlaying()?.playing ?: playing)
             }
         }
     }
@@ -142,7 +149,7 @@ class TvLinkService : Service() {
             }
         }
         render(cardOf(link.state.value))
-        Widgets.refresh(this, link.state.value, playing)
+        Widgets.refresh(this, link.state.value, link.state.value.nowPlaying()?.playing ?: playing)
     }
 
     private fun cardOf(state: UiState): Card {
@@ -161,7 +168,26 @@ class TvLinkService : Service() {
                     null, HOME_PACKAGE -> "Home screen"
                     else -> state.meta[app]?.label ?: fallbackLabel(app)
                 }
-                Card(title, "On your TV", Mode.CONTROLS, muted, playing, volumeKeys = state.volumeButtons && state.volume != null)
+                val volumeKeys = state.volumeButtons && state.volume != null
+                // A video's title and channel, its play state and position, when the app reports them over Cast.
+                val media = state.nowPlaying()
+                val video = media?.title
+                if (media != null && video != null) {
+                    Card(
+                        video,
+                        listOfNotNull(title, media.subtitle).joinToString(" · "),
+                        Mode.CONTROLS,
+                        muted,
+                        media.playing ?: playing,
+                        volumeKeys = volumeKeys,
+                        known = media.playing != null,
+                        positionMs = media.positionSec?.let { (it * 1000).toLong() } ?: PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                        durationMs = media.durationSec?.takeIf { !media.live }?.let { (it * 1000).toLong() } ?: 0,
+                        readAt = SystemClock.elapsedRealtime() - (System.currentTimeMillis() - media.readAtMs),
+                    )
+                } else {
+                    Card(title, "On your TV", Mode.CONTROLS, muted, playing, volumeKeys = volumeKeys)
+                }
             }
         }
     }
@@ -212,6 +238,7 @@ class TvLinkService : Service() {
         val metadata = MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, card.title)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, card.text)
+        if (card.durationMs > 0) metadata.putLong(MediaMetadata.METADATA_KEY_DURATION, card.durationMs)
         session.setMetadata(metadata.build())
         session.setPlaybackState(playbackState(card))
 
@@ -253,11 +280,15 @@ class TvLinkService : Service() {
                     PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
                         PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS,
                 )
-                // Android only sends volume buttons to a session that is playing, so it stays "playing" while it has them.
+                // Android only sends volume buttons to a session that is playing, so without a real play state from the
+                // TV it stays "playing" while it has them. A video the TV reports as paused shows as paused (the
+                // volume buttons are then the phone's until it plays again).
+                val playingNow = if (card.known) card.playing else card.playing || card.volumeKeys
                 state.setState(
-                    if (card.playing || card.volumeKeys) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
-                    PlaybackState.PLAYBACK_POSITION_UNKNOWN,
-                    1f,
+                    if (playingNow) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
+                    card.positionMs,
+                    if (playingNow) 1f else 0f,
+                    if (card.readAt > 0) card.readAt else SystemClock.elapsedRealtime(),
                 )
                 state.addCustomAction(
                     PlaybackState.CustomAction.Builder(

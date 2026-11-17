@@ -33,7 +33,28 @@ Requests made over the build, all implemented in version 3 unless noted:
 8. TV section: list all channels by category (Sports, News and so on), search them, pin and arrange them.
    Partly done: the list starts empty because no channel list could be obtained (see section 9).
 
-## 3. Current state (version 19: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+## 3. Current state (version 20: version 5, plus section 9 item 6, the activity log in section 8, and in-app updates in section 7)
+
+### Version 20 (2026-11-17)
+
+- What's playing, from the box's Cast receiver (`atvremote/CastMedia.kt`, read-only): apps with Cast support
+  (YouTube) list a session in RECEIVER_STATUS even when opened on the TV, and answer the media channel's
+  GET_STATUS with title, artist (channel), playerState, currentTime and duration. Seen on 2026-11-17 with YouTube
+  playing a song. `TvLink.watchCast` runs it alongside each remote session while the TV is on (pings every 5 s,
+  media poll every 15 s, receiver poll every 30 s, pushed updates in between; retries after 10 s).
+  `UiState.nowPlaying()` only uses it when Cast's app name matches the app on screen. Titles stay out of the log.
+  `cli nowplaying <host> [ms]` prints it from the Mac.
+- Remote: rewind / play-pause / fast forward moved into the Now card under the app, which now shows the video
+  title, "App · channel", and a progress line with elapsed and total time (Live for live streams). The play icon
+  is pause while playing and play while paused; with no report (Live TV, apps without Cast) it shows both. On
+  short screens the card keeps only the controls. Save shows only for an app not yet in Apps.
+- Notification and Now playing widget show the title and channel; the notification's player card gets the real
+  play state and a progress bar. A video reported paused shows as paused, and then the phone's volume buttons are
+  the phone's until it plays again (Android only routes them to a playing session). Remote playback makes Android
+  draw an "Other device" chip on the player card.
+- Tested on the emulator against the box with YouTube playing: card, progress, pause icon, notification. Not
+  tested: the icon flipping on pause (that would have paused the owner's video); expected within a moment, at the
+  latest on the next 15 s poll.
 
 ### Version 19 (2026-11-17)
 

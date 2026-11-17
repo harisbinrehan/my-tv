@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -54,6 +56,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,14 +83,17 @@ import com.shoqremote.app.Link
 import com.shoqremote.app.RemoteViewModel
 import com.shoqremote.app.UiState
 import com.shoqremote.app.fallbackLabel
+import com.shoqremote.app.nowPlaying
+import com.shoqremote.atv.CastMediaInfo
+import kotlinx.coroutines.delay
 import com.shoqremote.atv.Keys
 import kotlin.math.roundToInt
 
 /**
- * The remote, styled after the owner's reference design: what's on and the volume at the top, then the big pad,
- * Back / Home / Assistant / Keyboard and the media bar low, within the thumb's reach. Live TV and TV settings live
- * in the bottom bar and the menu, so they aren't repeated here. Sized from the space available, so it never
- * scrolls; the What's on card only shows when the pad still gets 220 dp.
+ * The remote, styled after the owner's reference design: what's playing (with its play controls) and the volume at
+ * the top, then the big pad and Back / Home / Assistant / Keyboard low, within the thumb's reach. Live TV and TV
+ * settings live in the bottom bar and the menu, so they aren't repeated here. Sized from the space available, so it
+ * never scrolls; the card's title part only shows when the pad still gets 220 dp (its controls always do).
  */
 @Composable
 internal fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit, onType: () -> Unit, openApps: () -> Unit) {
@@ -107,21 +114,27 @@ internal fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit
         val gap = if (compact) 10.dp else 12.dp
         val volume = if (compact) 54.dp else 60.dp
         val keys = if (compact) 60.dp else 68.dp
-        val media = if (compact) 50.dp else 56.dp
-        val now = 64.dp
-        // Volume, keys and media, the two gaps below the pad, and at least one gap above it.
-        val fixed = volume + keys + media + gap * 3
-        val showNow = maxHeight - fixed - now - gap >= 220.dp
-        val pad = (maxHeight - fixed - if (showNow) now + gap else 0.dp)
+        val controls = if (compact) 50.dp else 54.dp
+        val header = NOW_HEADER + PROGRESS
+        // The card's controls, volume and keys, the gaps below the card and the pad, and at least one above the pad.
+        val fixed = controls + volume + keys + gap * 3
+        val showHeader = maxHeight - fixed - header >= 220.dp
+        val pad = (maxHeight - fixed - if (showHeader) header else 0.dp)
             .coerceAtMost(300.dp)
             .coerceAtMost(maxWidth - 40.dp)
             .coerceAtLeast(150.dp)
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (showNow) {
-                val app = state.currentApp?.takeIf { state.link == Link.CONNECTED && state.power != false && vm.canSave(it) }
-                NowCard(state, openApps, app?.let { { saving = it } }, Modifier.fillMaxWidth().height(now))
-                Spacer(Modifier.height(gap))
-            }
+            // Save is for an app that isn't in Apps yet; one that is just opens Apps.
+            val app = state.currentApp?.takeIf { state.link == Link.CONNECTED && state.power != false && vm.canSave(it) && it !in state.apps }
+            NowCard(
+                state,
+                onKey,
+                openApps,
+                app?.let { { saving = it } },
+                showHeader,
+                Modifier.fillMaxWidth().height(controls + if (showHeader) header else 0.dp),
+            )
+            Spacer(Modifier.height(gap))
             VolumeCard(state, vm, Modifier.fillMaxWidth().height(volume))
             // Spare height goes here, so the pad and everything below it sit low on tall phones.
             Spacer(Modifier.weight(1f))
@@ -139,36 +152,65 @@ internal fun RemotePage(state: UiState, vm: RemoteViewModel, onVoice: () -> Unit
                 )
                 Shortcut(Icons.Rounded.Keyboard, "Keyboard", Modifier.weight(1f).fillMaxHeight(), accent = true, onClick = onType)
             }
-            Spacer(Modifier.height(gap))
-            MediaBar(onKey, Modifier.fillMaxWidth().height(media))
         }
     }
 }
 
-/** What the TV is showing, with the app's icon; tapping it goes to Apps, Save keeps the running app there. */
+private val NOW_HEADER = 60.dp
+private val PROGRESS = 20.dp
+
+/**
+ * What's on the TV and its play controls in one card. The top part shows the app's icon and, when the app reports it
+ * over Cast (YouTube does), the video's title, channel and progress; tapping it goes to Apps, Save keeps the running
+ * app there. The controls stay even when there's no room for the top part.
+ */
 @Composable
-private fun NowCard(state: UiState, openApps: () -> Unit, onSave: (() -> Unit)?, modifier: Modifier) {
+private fun NowCard(
+    state: UiState,
+    onKey: (Int, Int) -> Unit,
+    openApps: () -> Unit,
+    onSave: (() -> Unit)?,
+    showHeader: Boolean,
+    modifier: Modifier,
+) {
+    val playing = state.nowPlaying()
+    val media = playing?.takeIf { it.title != null }
+    Column(modifier.card()) {
+        if (showHeader) {
+            NowHeader(state, media, openApps, onSave, Modifier.fillMaxWidth().height(NOW_HEADER))
+            Progress(media, Modifier.fillMaxWidth().height(PROGRESS).padding(horizontal = 14.dp))
+        }
+        PlayControls(onKey, playing?.playing, Modifier.fillMaxWidth().weight(1f))
+    }
+}
+
+@Composable
+private fun NowHeader(state: UiState, media: CastMediaInfo?, openApps: () -> Unit, onSave: (() -> Unit)?, modifier: Modifier) {
     val app = state.currentApp
     val connected = state.link == Link.CONNECTED
     val on = connected && state.power != false
+    val appName = when {
+        app == null || app == HOME_PACKAGE -> "Home screen"
+        else -> state.meta[app]?.label ?: fallbackLabel(app)
+    }
     val title = when {
         !connected -> "Not connected"
         !on -> "TV in standby"
-        app == null || app == HOME_PACKAGE -> "Home screen"
-        else -> state.meta[app]?.label ?: fallbackLabel(app)
+        media != null -> media.title.orEmpty()
+        else -> appName
     }
     val subtitle = when {
         !connected -> "Looking for your TV"
         !on -> "Tap power to turn it on"
+        media != null -> listOfNotNull(appName, media.subtitle).joinToString("  ·  ")
         else -> "On your TV"
     }
     val path = app?.takeIf { on }?.let { state.meta[it]?.iconPath }
     val icon = remember(path) { path?.let { BitmapFactory.decodeFile(it)?.asImageBitmap() } }
     Row(
         modifier
-            .card()
             .clickable(onClickLabel = "Open Apps", role = Role.Button, onClick = openApps)
-            .padding(start = 12.dp, end = 8.dp),
+            .padding(start = 12.dp, end = 8.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -192,10 +234,11 @@ private fun NowCard(state: UiState, openApps: () -> Unit, onSave: (() -> Unit)?,
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, fontSize = 12.sp, color = Palette.Muted, maxLines = 1)
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, fontSize = 12.sp, color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (onSave != null) {
+            Spacer(Modifier.width(8.dp))
             Row(
                 Modifier
                     .clip(RoundedCornerShape(14.dp))
@@ -213,6 +256,55 @@ private fun NowCard(state: UiState, openApps: () -> Unit, onSave: (() -> Unit)?,
             Icon(Icons.Rounded.ChevronRight, null, tint = Palette.Muted)
         }
     }
+}
+
+/**
+ * The video's progress with elapsed and total time, moving on by itself while it plays (the box reports the position
+ * every 15 s and on every change). A live stream says Live; with nothing reported it's a plain divider.
+ */
+@Composable
+private fun Progress(media: CastMediaInfo?, modifier: Modifier) {
+    var clock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(media?.playing, media?.readAtMs) {
+        clock = System.currentTimeMillis()
+        while (media?.playing == true) {
+            delay(1_000)
+            clock = System.currentTimeMillis()
+        }
+    }
+    val duration = media?.durationSec?.takeIf { !media.live }
+    val start = media?.positionSec
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        when {
+            media?.live == true -> {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(Palette.Danger))
+                Spacer(Modifier.width(6.dp))
+                Text("Live", fontSize = 11.sp, color = Palette.Muted)
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f).height(1.dp).background(Palette.Line))
+            }
+            duration != null && start != null -> {
+                val ran = if (media.playing == true) (clock - media.readAtMs).coerceAtLeast(0) / 1000.0 else 0.0
+                val position = (start + ran).coerceIn(0.0, duration)
+                Text(clockText(position), fontSize = 11.sp, color = Palette.Muted, maxLines = 1)
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f).height(3.dp).clip(CircleShape).background(Palette.Line)) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth((position / duration).toFloat()).background(Palette.Indigo))
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(clockText(duration), fontSize = 11.sp, color = Palette.Muted, maxLines = 1)
+            }
+            else -> Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.Line))
+        }
+    }
+}
+
+private fun clockText(seconds: Double): String {
+    val total = seconds.toLong()
+    val h = total / 3600
+    val m = total % 3600 / 60
+    val s = total % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
 /** Keeps the running app in Apps under a name you choose, for apps whose own name the box doesn't report. */
@@ -429,17 +521,31 @@ private fun Shortcut(
     }
 }
 
-/** Rewind, play or pause, and fast forward as one bar. */
+/**
+ * Rewind, play or pause, and fast forward. The middle icon follows what the app on the TV reports (pause while it
+ * plays, play while paused); when it reports nothing, it shows both, since the key toggles.
+ */
 @Composable
-private fun MediaBar(onKey: (Int, Int) -> Unit, modifier: Modifier) {
-    val shape = RoundedCornerShape(percent = 50)
-    Row(modifier.clip(shape).background(CardBrush).border(1.dp, Palette.Line, shape), verticalAlignment = Alignment.CenterVertically) {
+private fun PlayControls(onKey: (Int, Int) -> Unit, playing: Boolean?, modifier: Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         KeyButton(onKey, Keys.MEDIA_REWIND, "Rewind", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {
             Icon(Icons.Rounded.FastRewind, null, Modifier.size(24.dp), tint = Palette.Text)
         }
         Box(Modifier.width(1.dp).height(22.dp).background(Palette.Line))
-        KeyButton(onKey, Keys.MEDIA_PLAY_PAUSE, "Play or pause", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {
-            Icon(Icons.Rounded.PlayArrow, null, Modifier.size(28.dp), tint = Palette.Text)
+        val label = when (playing) {
+            true -> "Pause"
+            false -> "Play"
+            null -> "Play or pause"
+        }
+        KeyButton(onKey, Keys.MEDIA_PLAY_PAUSE, label, Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {
+            when (playing) {
+                true -> Icon(Icons.Rounded.Pause, null, Modifier.size(28.dp), tint = Palette.Text)
+                false -> Icon(Icons.Rounded.PlayArrow, null, Modifier.size(30.dp), tint = Palette.Text)
+                null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.PlayArrow, null, Modifier.size(24.dp), tint = Palette.Text)
+                    Icon(Icons.Rounded.Pause, null, Modifier.size(20.dp).offset(x = (-3).dp), tint = Palette.Text)
+                }
+            }
         }
         Box(Modifier.width(1.dp).height(22.dp).background(Palette.Line))
         KeyButton(onKey, Keys.MEDIA_FAST_FORWARD, "Fast forward", Modifier.weight(1f).fillMaxHeight(), shape = RectangleShape, color = Color.Transparent) {

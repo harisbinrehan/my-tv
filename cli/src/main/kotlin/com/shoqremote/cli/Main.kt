@@ -1,6 +1,7 @@
 package com.shoqremote.cli
 
 import com.shoqremote.atv.BadCodeException
+import com.shoqremote.atv.CastMedia
 import com.shoqremote.atv.CastWake
 import com.shoqremote.atv.ClientIdentity
 import com.shoqremote.atv.DeviceInfo
@@ -27,6 +28,7 @@ fun main(args: Array<String>) {
         when (args.firstOrNull()) {
             "pin" -> pin(args.getOrElse(1) { ShoqBox.DEFAULT_HOST })
             "castwake" -> println("RESULT " + CastWake.wake(args.getOrElse(1) { ShoqBox.DEFAULT_HOST }) { println("CAST $it") })
+            "nowplaying" -> nowPlaying(args.getOrElse(1) { ShoqBox.DEFAULT_HOST }, args.getOrNull(2)?.toLong() ?: 20_000)
             "pair" -> pair(args.at(1), File(args.at(2)), File(args.at(3)))
             "status" -> connectAnd(args.at(1), File(args.at(2))) { Thread.sleep(3_000) }
             "key" -> connectAnd(args.at(1), File(args.at(2))) { client -> pressKeys(client, args.drop(3)) }
@@ -47,8 +49,18 @@ fun main(args: Array<String>) {
 private fun Array<String>.at(index: Int): String = getOrNull(index) ?: usage()
 
 private fun usage(): Nothing {
-    System.err.println("usage: cli pin [host] | castwake [host] | pair <host> <stateDir> <codeFile> | status <host> <stateDir> | key <host> <stateDir> <KEY>...")
+    System.err.println("usage: cli pin [host] | castwake [host] | nowplaying [host] [ms] | pair <host> <stateDir> <codeFile> | status <host> <stateDir> | key <host> <stateDir> <KEY>...")
     exitProcess(2)
+}
+
+/** Prints what the box reports as playing over Cast, as it changes, for [ms] milliseconds (read-only). */
+private fun nowPlaying(host: String, ms: Long) {
+    val watcher = CastMedia(host) { println("CAST $it") }
+    Thread {
+        Thread.sleep(ms)
+        watcher.close()
+    }.apply { isDaemon = true }.start()
+    runCatching { watcher.run { println("MEDIA $it") } }.onFailure { if (it !is java.net.SocketException) throw it }
 }
 
 private fun pin(host: String) {

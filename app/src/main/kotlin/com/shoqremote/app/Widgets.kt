@@ -61,6 +61,11 @@ object Widgets {
             !on -> "Tap power to turn it on"
             else -> "On your TV"
         }
+        // A video's title and channel when the app on the TV reports them over Cast.
+        val media = state.nowPlaying()?.takeIf { on && it.title != null }
+        if (media != null) {
+            return Look(on, connected, media.title.orEmpty(), listOfNotNull(title, media.subtitle).joinToString(" · "), state.volume?.muted == true, playing)
+        }
         return Look(on, connected, title, subtitle, state.volume?.muted == true, playing)
     }
 

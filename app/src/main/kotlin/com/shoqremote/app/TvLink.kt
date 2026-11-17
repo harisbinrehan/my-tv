@@ -11,6 +11,8 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
 import com.shoqremote.atv.BadCodeException
+import com.shoqremote.atv.CastMedia
+import com.shoqremote.atv.CastMediaInfo
 import com.shoqremote.atv.ClientIdentity
 import com.shoqremote.atv.DeviceInfo
 import com.shoqremote.atv.Direction
@@ -52,6 +54,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
 
 enum class Link { NOT_PAIRED, CONNECTING, CONNECTED, OFFLINE }
@@ -78,9 +81,26 @@ data class UiState(
     val listening: Boolean = false,
     val notificationControls: Boolean = true,
     val volumeButtons: Boolean = true,
+    /** What the box's Cast receiver says is playing; see [nowPlaying] for the part that belongs to the app on screen. */
+    val media: CastMediaInfo? = null,
     val pairing: PairingStep = PairingStep.IDLE,
     val pairingMessage: String? = null,
 )
+
+/**
+ * The video playing in the app on screen (title, channel, play state, position), when the box's Cast receiver
+ * reports it for that same app. Apps without Cast support, Live TV and the home screen have none.
+ */
+fun UiState.nowPlaying(): CastMediaInfo? {
+    val playing = media ?: return null
+    if (link != Link.CONNECTED || power == false) return null
+    val app = currentApp ?: return null
+    val label = meta[app]?.label ?: fallbackLabel(app)
+    fun key(name: String) = name.lowercase().filter(Char::isLetterOrDigit)
+    val a = key(playing.app)
+    val b = key(label)
+    return playing.takeIf { a.isNotEmpty() && b.isNotEmpty() && (a in b || b in a) }
+}
 
 const val SETTINGS_PACKAGE = "com.android.tv.settings"
 const val HOME_PACKAGE = "com.launcher.ptcl"
@@ -108,6 +128,7 @@ private const val VOICE_RATE = 8_000
 private const val VOICE_CHUNK = 16 * 1024
 private const val VOICE_MAX_MS = 10_000L
 private const val MAX_VOLUME_STEPS = 30
+private const val CAST_RETRY_MS = 10_000L
 
 
 val CHANNEL_CATEGORIES = listOf("News", "Sports", "Entertainment", "Movies", "Kids", "Islamic", "Infotainment", "Music", "Regional", "Other")
@@ -927,12 +948,49 @@ class TvLink(private val app: Application) {
         }
         mirror = TextMirror(session, mirror?.text.orEmpty())
         client = session
+        val castJob = scope.launch { watchCast(host) }
         return try {
             closed.await()
         } finally {
+            castJob.cancel()
+            _state.update { it.copy(media = null) }
             // The mirror outlives the connection: the next one carries on from what the TV box already holds.
             if (client === session) client = null
             session.close()
+        }
+    }
+
+    /**
+     * While the TV is on, follows what's playing through the box's Cast receiver (read-only; see [CastMedia]).
+     * It stops in standby and retries after a pause if the box drops it.
+     */
+    private suspend fun watchCast(host: String) {
+        while (true) {
+            _state.first { it.power == true }
+            val watcher = CastMedia(host) { Trace.i(it) }
+            val stopper = scope.launch {
+                _state.first { it.power != true }
+                watcher.close()
+            }
+            try {
+                runInterruptible(Dispatchers.IO) {
+                    watcher.run { info ->
+                        // Titles stay out of the log: only the app and whether it plays.
+                        Trace.i("playing: ${info?.let { "${it.app} ${if (it.playing == true) "playing" else if (it.playing == false) "paused" else "idle"}" } ?: "nothing"}")
+                        _state.update { it.copy(media = info) }
+                    }
+                }
+            } catch (e: IOException) {
+                Trace.w("Cast status stopped", e)
+            } catch (e: RuntimeException) {
+                if (e is CancellationException) throw e
+                Trace.w("Cast status failed", e)
+            } finally {
+                stopper.cancel()
+                watcher.close()
+                _state.update { it.copy(media = null) }
+            }
+            delay(CAST_RETRY_MS)
         }
     }
 
